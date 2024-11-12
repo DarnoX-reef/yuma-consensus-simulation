@@ -198,8 +198,10 @@ def Yuma2(W, S, B_ema=None, kappa=0.5, bond_penalty=1, bond_alpha=0.1, liquid_al
         "alpha_b": b
     }
 
-def run_simulation(validators, stakes, stakes_tao, weights_epochs, num_epochs, total_emission, emission_ratio=0.41, yuma_function=Yuma):
+def run_simulation(validators, stakes, stakes_units, weights_epochs, num_epochs, total_emission, emission_ratio=0.41, yuma_function=Yuma):
     dividends_per_validator = {validator: [] for validator in validators}
+    weights_per_epoch = []
+    bonds_per_epoch = []
     B_state = None  # Holds B_old or B_ema depending on the Yuma function
 
     for epoch in range(num_epochs):
@@ -222,16 +224,21 @@ def run_simulation(validators, stakes, stakes_tao, weights_epochs, num_epochs, t
         validator_emission = E_i * total_emission
 
         for i, validator in enumerate(validators):
-            stake_tao = stakes_tao[i]
-            dividend_per_1000_tao = validator_emission[i].item() / stake_tao
+            stake_unit = stakes_units[i]
+            dividend_per_1000_tao = validator_emission[i].item() / stake_unit
             dividends_per_validator[validator].append(dividend_per_1000_tao)
 
-    return dividends_per_validator
+        weights_per_epoch.append(result['weight'].clone())
+        bonds_per_epoch.append(result['validator_bond'].clone())
+
+    return dividends_per_validator, weights_per_epoch, bonds_per_epoch
 
 
 def plot_results(num_epochs, dividends_per_validator, case):
     x = list(range(num_epochs))
     plt.figure(figsize=(14, 6))
+
+    line_styles = ['-', '--', ':', '-.']
 
     for validator, dividends in dividends_per_validator.items():
         # Ensure dividends are converted to numpy arrays
@@ -243,7 +250,7 @@ def plot_results(num_epochs, dividends_per_validator, case):
             dividends = np.array(dividends, dtype=float)
 
         y = dividends
-        plt.plot(x, y, marker='o', label=validator)
+        plt.plot(x, y, marker='o', label=validator, alpha=0.7, linestyle=line_styles.pop(0))
 
     if num_epochs == 40:  # For 2-day span (40 epochs)
         tick_locs = [0, 1, 2] + list(range(5, 39, 5)) + [39]
@@ -294,6 +301,47 @@ def plot_total_dividends(total_dividends, case, validators):
     plt.tight_layout()
     plt.show()
 
+def plot_weights(num_epochs, validators, servers, weights_per_epoch, case_name):
+    x = list(range(num_epochs))
+    plt.figure(figsize=(14, 6))
+
+    for idx_v, validator in enumerate(validators):
+        for idx_s, server in enumerate(servers):
+            weights = []
+            for epoch in range(num_epochs):
+                W = weights_per_epoch[epoch]  # Shape: (num_validators, num_servers)
+                weight = W[idx_v, idx_s].item()
+                weights.append(weight)
+            plt.plot(x, weights, label=f'{validator} to {server}')
+
+    plt.xlabel('Epoch')
+    plt.ylabel('Weight Assigned')
+    plt.title(f'Weights Assigned by Validators per Server Over Time\n{case_name}')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+def plot_bonds(num_epochs, validators, servers, bonds_per_epoch, case_name):
+    x = list(range(num_epochs))
+    plt.figure(figsize=(14, 6))
+
+    for idx_v, validator in enumerate(validators):
+        for idx_s, server in enumerate(servers):
+            bonds = []
+            for epoch in range(num_epochs):
+                B = bonds_per_epoch[epoch]
+                bond = B[idx_v, idx_s].item()
+                bonds.append(bond)
+            plt.plot(x, bonds, label=f'{validator} bond on {server}')
+
+    plt.xlabel('Epoch')
+    plt.ylabel('Bond Value')
+    plt.title(f'Bonds per Validator per Server Over Time\n{case_name}')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
 
 def calculate_total_dividends(validators, dividends_per_validator, num_epochs=30):
     total_dividends = {}
