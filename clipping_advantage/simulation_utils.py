@@ -1,13 +1,13 @@
 import torch
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import numpy as np  
 import math
 import itertools
 import pandas as pd
 from IPython.display import display, Markdown
-from cases import weights_epochs_cases
+from cases import cases
 import logging
-
 
 def Yuma(W, S, B_old=None, kappa=0.5, bond_penalty=1, bond_alpha=0.1, liquid_alpha = False, alpha_high = 0.9, alpha_low = 0.7, precision = 100000, override_consensus_high = None, override_consensus_low = None):
     # === Weight === 
@@ -83,7 +83,7 @@ def Yuma(W, S, B_old=None, kappa=0.5, bond_penalty=1, bond_alpha=0.1, liquid_alp
 
     # === Dividend ===
     D = (B_ema * I).sum(dim=1)
-    D_normalized = D / D.sum()
+    D_normalized = D / (D.sum() + 1e-6)
 
     return {
         "weight": W,
@@ -233,20 +233,21 @@ def run_simulation(validators, stakes, stakes_units, weights_epochs, num_epochs,
             dividend_per_1000_tao = validator_emission[i].item() / stake_unit
             dividends_per_validator[validator].append(dividend_per_1000_tao)
 
-        bonds_per_epoch.append(result['validator_bond'].clone())
+        bonds_per_epoch.append(result['validator_ema_bond'].clone())
 
     return dividends_per_validator, bonds_per_epoch
-
 
 def plot_results(num_epochs, dividends_per_validator, case):
     plt.close('all')  # Close all open figures
     plt.figure(figsize=(14, 6))
 
     num_epochs_calculated = None
+    marker_styles = ['+', 'x', '*', 'd']
+    marker_sizes = [14, 10, 8, 8]
     line_styles = ['-', '--', ':', '-.']
     x = None
 
-    for validator, dividends in dividends_per_validator.items():
+    for idx, (validator, dividends) in enumerate(dividends_per_validator.items()):
         # Convert dividends to numpy arrays
         if isinstance(dividends, torch.Tensor):
             dividends = dividends.detach().cpu().numpy()
@@ -258,11 +259,15 @@ def plot_results(num_epochs, dividends_per_validator, case):
         # Calculate num_epochs and x only once
         if num_epochs_calculated is None:
             num_epochs_calculated = len(dividends)
-            x = list(range(num_epochs_calculated))
+            x = np.array(range(num_epochs_calculated))
+
+        delta = 0.05  # Adjust this value as needed
+        x_shifted = x + idx * delta
+
 
         # Plot the dividends for each validator
         y = dividends
-        plt.plot(x, y, marker='o', label=validator, alpha=0.7, linestyle=line_styles.pop(0))
+        plt.plot(x_shifted, y, marker=marker_styles.pop(0), markersize=marker_sizes.pop(0), label=validator, alpha=0.7, linestyle=line_styles.pop(0))
 
     # Adjust tick locations and labels
     if num_epochs_calculated == 40:  # For 2-day span (40 epochs)
@@ -274,6 +279,13 @@ def plot_results(num_epochs, dividends_per_validator, case):
 
     tick_labels = [i if i in tick_locs else '' for i in range(num_epochs_calculated)]
 
+    # plt.gca().yaxis.set_major_formatter(mticker.ScalarFormatter())
+    # plt.gca().ticklabel_format(style='plain', axis='y')
+    
+    #there is some matplotlib glitch with the 4, so we need to adjust the y axis
+    if case == "Case 4 - Yuma 1":
+        plt.ylim(0.04, 0.045)
+
     plt.xlabel('Time (Epochs)')
     plt.ylabel('Dividend per 1,000 Tao per Epoch')
     plt.title(f'Validators dividends Over Time (2 days span) {case}')
@@ -282,8 +294,6 @@ def plot_results(num_epochs, dividends_per_validator, case):
     plt.xticks(ticks=x, labels=tick_labels, fontsize=8)
     plt.tight_layout()
     plt.show()
-
-
 
 def plot_total_dividends(total_dividends, case, validators):
     dividends = [total_dividends[validator] for validator in validators]
@@ -314,27 +324,6 @@ def plot_total_dividends(total_dividends, case, validators):
     plt.tight_layout()
     plt.show()
 
-def plot_weights(num_epochs, validators, servers, weights_per_epoch, case_name):
-    x = list(range(num_epochs))
-    plt.figure(figsize=(14, 6))
-
-    for idx_v, validator in enumerate(validators):
-        for idx_s, server in enumerate(servers):
-            weights = []
-            for epoch in range(num_epochs):
-                W = weights_per_epoch[epoch]  # Shape: (num_validators, num_servers)
-                weight = W[idx_v, idx_s].item()
-                weights.append(weight)
-            plt.plot(x, weights, label=f'{validator} to {server}')
-
-    plt.xlabel('Epoch')
-    plt.ylabel('Weight Assigned')
-    plt.title(f'Weights Assigned by Validators per Server Over Time\n{case_name}')
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
-
 def plot_bonds(num_epochs, validators, servers, bonds_per_epoch, case_name):
     x = list(range(num_epochs))
     
@@ -342,10 +331,17 @@ def plot_bonds(num_epochs, validators, servers, bonds_per_epoch, case_name):
     fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharex=True, sharey=True)
     fig.suptitle(f'Validators bonds per Server Over Time\n{case_name}', fontsize=14)
 
-    line_styles = ['-', '--', ':']
-    style_cycle = itertools.cycle(line_styles)
-    validator_styles = {validator: next(style_cycle) for validator in validators}
+    combined_styles = [
+        ('-', '+', 12),  # Line style, marker style, marker size
+        ('--', 'x', 12),
+        (':', '*', 8)
+    ]
 
+    # Assign styles to each validator
+    validator_styles = {
+        validator: combined_styles[idx % len(combined_styles)]
+        for idx, validator in enumerate(validators)
+    }
     # To collect handles for the shared legend
     handles = []
     labels = []
@@ -359,11 +355,13 @@ def plot_bonds(num_epochs, validators, servers, bonds_per_epoch, case_name):
                 bond = B[idx_v, idx_s].item()
                 bonds.append(bond)
 
-            linestyle = validator_styles[validator]
+            linestyle, marker, markersize = validator_styles[validator]
+
             line, = ax.plot(
                 x, bonds, 
-                marker='o', 
                 alpha=0.7, 
+                marker=marker,
+                markersize=markersize,
                 linestyle=linestyle,
                 linewidth=2  # Optional: Adjust line width for better visibility
             )
@@ -396,8 +394,7 @@ def calculate_total_dividends(validators, dividends_per_validator, num_epochs=30
         total_dividends[validator] = total_dividend
     return total_dividends
 
-
-def generate_weight_table(case_name, weights_epochs, validators, num_epochs):
+def generate_weights_table(case_name, weights_epochs, validators, num_epochs):
     # Define which epochs to include based on total_epochs
     if num_epochs == 40:
         include_epochs = [1, 2, 3, 40]
@@ -453,10 +450,8 @@ dividends_per_validator, bonds_per_epoch = run_simulation(
     validators,
     stakes,
     stakes_units,
-    weights_epochs_cases['Case 7'],
+    cases[0]['weights_epochs'],
     40,
     total_emission,
     yuma_function=Yuma
 )
-
-print("Dividends per validator per 1,000 Tao staked:")

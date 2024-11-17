@@ -59,29 +59,18 @@ for epoch in range(40):
     weights_epochs_case_3.append(W)
 
 weights_epochs_case_4 = []
-for epoch in range(80):
+for epoch in range(40):
     W = torch.zeros(3, 2)
     if epoch == 0:
-        # Initialy consensus is achieved by all Validators
-        W[:, 0] = 1.0
-    elif epoch == 1:
+        # All validators support Server 1
         W[0, 0] = 1.0  # Validator A -> Server 1
-        W[1, 1] = 1.0  # Validator B -> Server 2
-        W[2, 1] = 1.0  # Validator C -> Server 2
-    elif epoch == 2:
+        W[1, 0] = 1.0  # Validator B -> Server 1
+        W[2, 0] = 1.0  # Validator C -> Server 1
+    if epoch >= 1:
+        # All validators support Server 2
         W[0, 1] = 1.0  # Validator A -> Server 2
         W[1, 1] = 1.0  # Validator B -> Server 2
         W[2, 1] = 1.0  # Validator C -> Server 2
-    elif epoch >= 3 and epoch <= 40:
-        # Subsequent epochs
-        W[:, 1] = 1.0  # All validators -> Server 2
-    elif epoch == 41:
-        W[0, 1] = 1.0  # Validator A -> Server 1
-        W[1, 1] = 1.0  # Validator B -> Server 1
-        W[2, 0] = 1.0  # Validator C -> Server 2
-    else:
-        # Subsequent epochs
-        W[:, 0] = 1.0 # All validators -> Server 1
     weights_epochs_case_4.append(W)
 
 weights_epochs_case_5 = []
@@ -134,18 +123,29 @@ for epoch in range(80):
     weights_epochs_case_6.append(W)
 
 weights_epochs_case_7 = []
-for epoch in range(40):
+for epoch in range(80):
     W = torch.zeros(3, 2)
     if epoch == 0:
-        # All validators support Server 1
+        # Initialy consensus is achieved by all Validators
+        W[:, 0] = 1.0
+    elif epoch == 1:
         W[0, 0] = 1.0  # Validator A -> Server 1
-        W[1, 0] = 1.0  # Validator B -> Server 1
-        W[2, 0] = 1.0  # Validator C -> Server 1
-    else:
-        # All validators support Server 2
+        W[1, 1] = 1.0  # Validator B -> Server 2
+        W[2, 1] = 1.0  # Validator C -> Server 2
+    elif epoch == 2:
         W[0, 1] = 1.0  # Validator A -> Server 2
         W[1, 1] = 1.0  # Validator B -> Server 2
         W[2, 1] = 1.0  # Validator C -> Server 2
+    elif epoch >= 3 and epoch <= 40:
+        # Subsequent epochs
+        W[:, 1] = 1.0  # All validators -> Server 2
+    elif epoch == 41:
+        W[0, 1] = 1.0  # Validator A -> Server 1
+        W[1, 1] = 1.0  # Validator B -> Server 1
+        W[2, 0] = 1.0  # Validator C -> Server 2
+    else:
+        # Subsequent epochs
+        W[:, 0] = 1.0 # All validators -> Server 1
     weights_epochs_case_7.append(W)
 
 weights_epochs_case_8 = []
@@ -176,13 +176,53 @@ for epoch in range(80):
         W[1:, 0] = 1.0
     weights_epochs_case_8.append(W)
 
-weights_epochs_cases = {
-    'Case 1': weights_epochs_case_1,
-    'Case 2': weights_epochs_case_2,
-    'Case 3': weights_epochs_case_3,
-    'Case 4': weights_epochs_case_4,
-    'Case 5': weights_epochs_case_5,
-    'Case 6': weights_epochs_case_6,
-    'Case 7': weights_epochs_case_7,
-    'Case 8': weights_epochs_case_8
-}
+cases = [
+    {
+        'name': 'Case 1',
+        'num_epochs': 40,
+        'weights_epochs': weights_epochs_case_1,
+        'validators': ['Big vali.', 'Small lazy vali.', 'Small lazier vali.'],
+    },
+    {
+        'name': 'Case 2',
+        'num_epochs': 40,
+        'weights_epochs': weights_epochs_case_2,
+        'validators': ['Big vali.', 'Small eager vali.', 'Small lazy vali.'],
+    },
+    {
+        'name': 'Case 3',
+        'num_epochs': 40,
+        'weights_epochs': weights_epochs_case_3,
+        'validators': ['Big vali.', 'Small eager vali.', 'Small lazy vali.'],
+    },
+    {
+        'name': 'Case 4',
+        'num_epochs': 40,
+        'weights_epochs': weights_epochs_case_4,
+        'validators': ['Big vali.', 'Small vali.', 'Small vali 2.'],
+    },
+    {
+        'name': 'Case 5',
+        'num_epochs': 80,
+        'weights_epochs': weights_epochs_case_5,
+        'validators': ['Big vali.', 'Small eage-eager vali.', 'Small eager-lazy vali.'],
+    },
+    {
+        'name': 'Case 6',
+        'num_epochs': 80,
+        'weights_epochs': weights_epochs_case_6,
+        'validators': ['Big vali.', 'Small eager vali.', 'Small lazy vali.'],
+    },
+    {
+        'name': 'Case 7',
+        'num_epochs': 80,
+        'weights_epochs': weights_epochs_case_7,
+        'validators': ['Big vali.', 'Small eager-eager vali.', 'Small eager-lazy vali.'],
+    },
+    {
+        'name': 'Case 8',
+        'num_epochs': 80,
+        'weights_epochs': weights_epochs_case_8,
+        'validators': ['Big unhonest vali.', 'Small eager-eager vali.', 'Small eager-eager vali 2.'],
+    },
+]
