@@ -176,53 +176,142 @@ for epoch in range(80):
         W[1:, 0] = 1.0
     weights_epochs_case_8.append(W)
 
+weights_epochs_case_9 = []
+for epoch in range(40):
+    W = torch.zeros(3, 2)
+    W[:, 0] = 1.0 # All validators -> Server 1
+    weights_epochs_case_9.append(W)
+
+stakes_epochs_case_1 = torch.tensor([0.8, 0.1, 0.1])
+
+stakes_epochs_case_2 = []
+for epoch in range(40):
+    if epoch >= 0 and epoch <= 20:
+        stakes = torch.tensor([0.8, 0.1, 0.1])
+    else:
+        stakes = torch.tensor([0.8, 0.2, 0.0]) # Validator C joins to Validator B
+    stakes_epochs_case_2.append(stakes)
+
+analysis_dict = {
+    'Case 1': {
+        'weights': "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+        'dividends': "Vestibulum at sem vitae sapien convallis aliquet non ut metus.",
+        'bonds': "Proin pharetra nunc vel orci cursus, et ultrices nulla faucibus.",
+    },
+    'Case 2': {
+        'weights': "Nullam hendrerit nisl in orci cursus fermentum eu in quam.",
+        'dividends': "Aliquam erat volutpat, sed tempus massa sed aliquet varius.",
+        'bonds': "Fusce vehicula urna at libero luctus, eget pretium arcu pulvinar.",
+    },
+    'Case 3': {
+        'weights': "Sed ut perspiciatis unde omnis iste natus error sit voluptatem.",
+        'dividends': "Quisque sodales justo id sapien sodales tincidunt eu in magna.",
+        'bonds': "Aenean faucibus nisi nec sem vehicula, vitae blandit lorem euismod.",
+    },
+    'Case 4': {
+        'weights': "Vivamus pellentesque neque at risus aliquet, sit amet tempus libero.",
+        'dividends': "Ut id lorem vel nisi gravida bibendum eget sit amet eros.",
+        'bonds': "Integer placerat sapien vel eros consectetur, sed dignissim risus feugiat.",
+    },
+    'Case 5': {
+        'weights': "Donec accumsan lacus id lectus bibendum, at pulvinar nisi tempor.",
+        'dividends': "Curabitur nec urna nec sapien rhoncus fermentum sed in odio.",
+        'bonds': "Maecenas sit amet urna quis nisi laoreet tincidunt a ut dui.",
+    },
+    'Case 6': {
+        'weights': "Suspendisse potenti, ut malesuada nisl sit amet pulvinar feugiat.",
+        'dividends': "Praesent ut velit ut lorem vehicula convallis vitae ac sapien.",
+        'bonds': "Nunc nec lacus vel urna facilisis ultricies ut sit amet leo.",
+    },
+    'Case 7': {
+        'weights': "Phasellus vitae lectus eget dolor euismod accumsan vitae id nulla.",
+        'dividends': "Ut faucibus urna non nisi laoreet, vel feugiat augue tincidunt.",
+        'bonds': "Morbi scelerisque enim vel neque tincidunt, sit amet lacinia ipsum gravida.",
+    },
+    'Case 8': {
+        'weights': "Curabitur at sapien in orci tincidunt fermentum at et est.",
+        'dividends': "Mauris hendrerit nisi ut augue placerat, ac varius mi laoreet.",
+        'bonds': "Etiam eleifend libero id purus tincidunt, in malesuada eros molestie.",
+    },
+    'Case 9': {
+        'weights': "Fusce fringilla orci vel erat scelerisque, eget varius enim dictum.",
+        'dividends': "Pellentesque ultricies nisl vel ligula dapibus malesuada vitae a elit.",
+        'bonds': "Sed laoreet erat eget erat pellentesque, ac fermentum ligula tincidunt.",
+    },
+}
+
+
 cases = [
     {
-        'name': 'Case 1',
+        'name': 'Case 1 - kappa moves first',
         'num_epochs': 40,
         'weights_epochs': weights_epochs_case_1,
+        'stakes_epochs': [stakes_epochs_case_1] * 40,
+        'analysis': analysis_dict['Case 1'],
         'validators': ['Big vali.', 'Small lazy vali.', 'Small lazier vali.'],
     },
     {
-        'name': 'Case 2',
+        'name': 'Case 2 - kappa moves second',
         'num_epochs': 40,
         'weights_epochs': weights_epochs_case_2,
+        'stakes_epochs': [stakes_epochs_case_1] * 40,
+        'analysis': analysis_dict['Case 2'],
         'validators': ['Big vali.', 'Small eager vali.', 'Small lazy vali.'],
     },
     {
-        'name': 'Case 3',
+        'name': 'Case 3 - kappa moves third',
         'num_epochs': 40,
         'weights_epochs': weights_epochs_case_3,
+        'stakes_epochs': [stakes_epochs_case_1] * 40,
+        'analysis': analysis_dict['Case 3'],
         'validators': ['Big vali.', 'Small eager vali.', 'Small lazy vali.'],
     },
     {
-        'name': 'Case 4',
+        'name': 'Case 4 - all validators switch',
         'num_epochs': 40,
         'weights_epochs': weights_epochs_case_4,
+        'stakes_epochs': [stakes_epochs_case_1] * 40,
+        'analysis': analysis_dict['Case 4'],
         'validators': ['Big vali.', 'Small vali.', 'Small vali 2.'],
     },
     {
-        'name': 'Case 5',
+        'name': 'Case 5 - kappa moves second, then third',
         'num_epochs': 80,
         'weights_epochs': weights_epochs_case_5,
-        'validators': ['Big vali.', 'Small eage-eager vali.', 'Small eager-lazy vali.'],
-    },
-    {
-        'name': 'Case 6',
-        'num_epochs': 80,
-        'weights_epochs': weights_epochs_case_6,
-        'validators': ['Big vali.', 'Small eager vali.', 'Small lazy vali.'],
-    },
-    {
-        'name': 'Case 7',
-        'num_epochs': 80,
-        'weights_epochs': weights_epochs_case_7,
+        'stakes_epochs': [stakes_epochs_case_1] * 80,
+        'analysis': analysis_dict['Case 5'],
         'validators': ['Big vali.', 'Small eager-eager vali.', 'Small eager-lazy vali.'],
     },
     {
-        'name': 'Case 8',
+        'name': 'Case 6 - kappa moves second, then all validators switch',
+        'num_epochs': 80,
+        'weights_epochs': weights_epochs_case_6,
+        'stakes_epochs': [stakes_epochs_case_1] * 80,
+        'analysis': analysis_dict['Case 6'],
+        'validators': ['Big vali.', 'Small eager vali.', 'Small lazy vali.'],
+    },
+    {
+        'name': 'Case 7 - kappa moves second, then second',
+        'num_epochs': 80,
+        'weights_epochs': weights_epochs_case_7,
+        'stakes_epochs': [stakes_epochs_case_1] * 80,
+        'analysis': analysis_dict['Case 7'],
+        'validators': ['Big vali.', 'Small eager-eager vali.', 'Small eager-lazy vali.'],
+    },
+    {
+        'name': 'Case 8 - kappa moves second, then second',
         'num_epochs': 80,
         'weights_epochs': weights_epochs_case_8,
+        'stakes_epochs': [stakes_epochs_case_1] * 80,
+        'analysis': analysis_dict['Case 8'],
         'validators': ['Big unhonest vali.', 'Small eager-eager vali.', 'Small eager-eager vali 2.'],
+    },
+    {
+        'name': 'Case 9 - small validators merged',
+        'num_epochs': 40,
+        'weights_epochs': weights_epochs_case_9,
+        'stakes_epochs': stakes_epochs_case_2,
+        'analysis': analysis_dict['Case 9'],
+        'validators': ['Big vali.', 'Small vali.', 'Small vali 2.'],
     },
 ]
