@@ -8,6 +8,7 @@ import torch
 import base64
 import io
 from IPython.display import Markdown, display, HTML
+from cases import cases
 
 
 def YumaRust(
@@ -366,6 +367,115 @@ def Yuma2(
         "alpha_b": b
     }
 
+def Yuma21(
+    W: torch.Tensor,
+    W_prev: torch.Tensor,
+    S: torch.Tensor,
+    B_old: Optional[torch.Tensor] = None,
+    kappa: float = 0.5,
+    bond_penalty: float = 1.0,
+    bond_alpha: float = 0.1,
+    liquid_alpha: bool = False,
+    alpha_high: float = 0.9,
+    alpha_low: float = 0.7,
+    precision: int = 100_000,
+    override_consensus_high: Optional[float] = None,
+    override_consensus_low: Optional[float] = None
+) -> Dict[str, Union[torch.Tensor, float]]:
+    """
+    Original Yuma function with bonds and EMA calculation.
+    """
+    # === Weight ===
+    W = (W.T / (W.sum(dim=1) + 1e-6)).T
+
+    if W_prev is None:
+        W_prev = W
+        
+    # === Stake ===
+    S = S / S.sum()
+
+    # === Prerank ===
+    P = (S.view(-1, 1) * W).sum(dim=0)
+
+    # === Consensus ===
+    C = torch.zeros(W.shape[1])
+
+    for i, miner_weight in enumerate(W.T):
+        c_high = 1.0
+        c_low = 0.0
+
+        while (c_high - c_low) > 1 / precision:
+            c_mid = (c_high + c_low) / 2.0
+            _c_sum = (miner_weight > c_mid) * S
+            if _c_sum.sum() > kappa:
+                c_low = c_mid
+            else:
+                c_high = c_mid
+
+        C[i] = c_high
+
+    C = (C / C.sum() * 65_535).int() / 65_535
+
+    # === Consensus clipped weight ===
+    W_clipped = torch.min(W, C)
+
+    # === Rank ===
+    R = (S.view(-1, 1) * W_clipped).sum(dim=0)
+
+    # === Incentive ===
+    I = (R / R.sum()).nan_to_num(0)
+
+    # === Trusts ===
+    T = (R / P).nan_to_num(0)
+    T_v = W_clipped.sum(dim=1) / W.sum(dim=1)
+
+    # === Bonds ===
+    W_b = (1 - bond_penalty) * W_prev + bond_penalty * W_clipped
+    B = S.view(-1, 1) * W_b / (S.view(-1, 1) * W_b).sum(dim=0)
+    B = B.nan_to_num(0)
+
+    a = b = None
+    if liquid_alpha:
+        consensus_high = override_consensus_high if override_consensus_high is not None else C.quantile(0.75)
+        consensus_low = override_consensus_low if override_consensus_low is not None else C.quantile(0.25)
+
+        if consensus_high == consensus_low:
+            consensus_high = C.quantile(0.99)
+
+        a = (math.log(1 / alpha_high - 1) - math.log(1 / alpha_low - 1)) / (consensus_low - consensus_high)
+        b = math.log(1 / alpha_low - 1) + a * consensus_low
+        alpha = 1 / (1 + math.e ** (-a * C + b))  # alpha to the old weight
+        bond_alpha = 1 - torch.clamp(alpha, alpha_low, alpha_high)
+
+    if B_old is not None:
+        B_ema = bond_alpha * B + (1 - bond_alpha) * B_old
+    else:
+        B_ema = B
+
+    # === Dividend ===
+    D = (B_ema * I).sum(dim=1)
+    D_normalized = D / (D.sum() + 1e-6)
+
+    return {
+        "weight": W,
+        "stake": S,
+        "server_prerank": P,
+        "server_consensus_weight": C,
+        "consensus_clipped_weight": W_clipped,
+        "server_rank": R,
+        "server_incentive": I,
+        "server_trust": T,
+        "validator_trust": T_v,
+        "weight_for_bond": W_b,
+        "validator_bond": B,
+        "validator_ema_bond": B_ema,
+        "validator_reward": D,
+        "validator_reward_normalized": D_normalized,
+        "bond_alpha": bond_alpha,
+        "alpha_a": a,
+        "alpha_b": b
+    }
+
 def Yuma3(
     W: torch.Tensor,
     S: torch.Tensor,
@@ -478,6 +588,7 @@ def run_simulation(
     dividends_per_validator = {validator: [] for validator in validators}
     bonds_per_epoch = []
     B_state: Optional[torch.Tensor] = None  # Holds B_old or B_ema depending on the Yuma function
+    prev_W: Optional[torch.Tensor] = None
 
     for epoch in range(num_epochs):
         W = weights[epoch]
@@ -488,11 +599,12 @@ def run_simulation(
 
         # Call the appropriate Yuma function
         if yuma_function == Yuma:
-            result = yuma_function(W, S, B_old=B_state, kappa=0.5, bond_penalty=bond_penalty)
+            result = yuma_function(W=W, S=S, B_old=B_state, kappa=0.5, bond_penalty=bond_penalty)
             B_state = result['validator_ema_bond']
-        elif yuma_function == Yuma2:
-            result = yuma_function(W, S, B_ema=B_state, kappa=0.5, bond_penalty=bond_penalty)
+        elif yuma_function == Yuma21:
+            result = yuma_function(W=W, prev_W=prev_W, S=S, B_ema=B_state, kappa=0.5, bond_penalty=bond_penalty)
             B_state = result['validator_ema_bond']
+            prev_W = result['weight']
         elif yuma_function == Yuma3:
             result = yuma_function(W, S, B_old=B_state, decay_rate=0.1, alpha=0.1)
             B_state = result['validator_bonds']
