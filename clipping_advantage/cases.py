@@ -179,8 +179,41 @@ for epoch in range(80):
 weights_epochs_case_9 = []
 for epoch in range(40):
     W = torch.zeros(3, 2)
-    W[:, 0] = 1.0 # All validators -> Server 1
+    W[:, 1] = 1.0 # All validators -> Server 2
     weights_epochs_case_9.append(W)
+
+weights_epochs_case_10 = []
+for epoch in range(40):
+    W = torch.zeros(3, 2)
+    if epoch == 0:
+        # Initialy consensus is achieved by all Validators
+        W[:, 0] = 1.0
+    elif epoch >=1 and epoch < 10:
+        W[0, 0] = 1.0  # Validator A -> Server 1
+        W[1, 1] = 1.0  # Validator B -> Server 2
+        W[2, 0] = 1.0  # Validator C -> Server 1
+    elif epoch == 10:
+        W[0, 1] = 1.0  # Validator A -> Server 2
+        W[1, 1] = 1.0  # Validator B -> Server 2
+        W[2, 0] = 1.0  # Validator C -> Server 1
+    else:
+        # Subsequent epochs
+        W[:, 1] = 1.0  # All validators -> Server 2
+    weights_epochs_case_10.append(W)
+
+weights_epochs_case_11 = []
+for epoch in range(40):
+    W = torch.zeros(3, 2)
+    if epoch < 20:
+        W[0, 0] = 0.3
+        W[1, 0] = 0.6
+        W[2, 0] = 0.61
+    else:
+        W[0, 0] = 0.3 
+        W[1, 0] = 0.6
+        W[2, 0] = 0.3 
+    weights_epochs_case_11.append(W)
+
 
 stakes_epochs_case_1 = torch.tensor([0.8, 0.1, 0.1])
 
@@ -191,6 +224,8 @@ for epoch in range(40):
     else:
         stakes = torch.tensor([0.8, 0.2, 0.0]) # Validator C joins to Validator B
     stakes_epochs_case_2.append(stakes)
+
+stakes_epochs_case_3 = torch.tensor([0.49, 0.49, 0.02])
 
 analysis_dict = {
     'Case 1': {
@@ -237,6 +272,16 @@ analysis_dict = {
         'weights': "Fusce fringilla orci vel erat scelerisque, eget varius enim dictum.",
         'dividends': "Pellentesque ultricies nisl vel ligula dapibus malesuada vitae a elit.",
         'bonds': "Sed laoreet erat eget erat pellentesque, ac fermentum ligula tincidunt.",
+    },
+    'Case 10': {
+        'weights': "Sed nec velit nec mi ultricies tincidunt eu nec libero.",
+        'dividends': "Sed nec velit nec mi ultricies",
+        'bonds': "Sed nec velit nec mi ultricies",
+    },
+    'case_11': {
+        'weights': "Sed nec velit nec mi ultricies tincidunt eu nec libero.",
+        'dividends': "Sed nec velit nec mi ultricies",
+        'bonds': "Sed nec velit nec mi ultricies",
     },
 }
 
@@ -296,7 +341,7 @@ cases = [
         'weights_epochs': weights_epochs_case_7,
         'stakes_epochs': [stakes_epochs_case_1] * 80,
         'analysis': analysis_dict['Case 7'],
-        'validators': ['Big vali.', 'Small eager-eager vali.', 'Small eager-lazy vali.'],
+        'validators': ['Big vali.', 'Small eager-lazy vali.', 'Small eager-eager vali.'],
     },
     {
         'name': 'Case 8 - kappa moves second, then second',
@@ -314,4 +359,20 @@ cases = [
         'analysis': analysis_dict['Case 9'],
         'validators': ['Big vali.', 'Small vali.', 'Small vali 2.'],
     },
+    {
+        'name': 'Case 10 - kappa delayed',
+        'num_epochs': 40,
+        'weights_epochs': weights_epochs_case_10,
+        'stakes_epochs': [stakes_epochs_case_1] * 40,
+        'analysis': analysis_dict['Case 10'],
+        'validators': ['Big delayed vali.', 'Small eager vali.', 'Small lazy vali.'],
+    },
+    {
+        'name': 'Case 11 - clipping bug',
+        'num_epochs': 40,
+        'weights_epochs': weights_epochs_case_11,
+        'stakes_epochs': [stakes_epochs_case_3] * 40,
+        'analysis': analysis_dict['case_11'],
+        'validators': ['Big vali. 1', 'Big vali. 2', 'Small vali.'],
+    }
 ]
