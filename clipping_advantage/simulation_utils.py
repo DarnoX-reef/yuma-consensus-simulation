@@ -1,3 +1,4 @@
+
 import math
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
@@ -645,6 +646,103 @@ def Yuma32(
         "validator_reward_normalized": D_normalized
     }
 
+def Yuma4(
+    W: torch.Tensor,
+    S: torch.Tensor,
+    B_old: Optional[torch.Tensor] = None,
+    kappa: float = 0.5,
+    bond_alpha: float = 0.1,
+    decay_rate: float = 0.1,
+    precision: int = 100_000,
+) -> Dict[str, torch.Tensor]:
+    """
+    Yuma4 function with per-bond cap of 1 and decay.
+    Bonds are between 0 and 1 per validator-miner relation, where bonds can increase
+    by at most bond_alpha per epoch towards the cap, and decay over time if validators stop buying bonds.
+    Dividends are calculated by multiplying the validator's stake with their bonds.
+    """
+    # === Weight Normalization ===
+    W = (W.T / (W.sum(dim=1) + 1e-6)).T  # Normalize weights per validator
+
+    # === Stake Normalization ===
+    S = S / S.sum()  # Normalize stakes
+
+    # === Prerank Calculation ===
+    P = (S.view(-1, 1) * W).sum(dim=0)
+
+    # === Consensus Calculation ===
+    C = torch.zeros(W.shape[1])  # Shape: (num_miners,)
+
+    for i, miner_weight in enumerate(W.T):
+        c_high = 1.0
+        c_low = 0.0
+
+        while (c_high - c_low) > 1 / precision:
+            c_mid = (c_high + c_low) / 2.0
+            _c_sum = ((miner_weight > c_mid).float() * S).sum()
+            if _c_sum > kappa:
+                c_low = c_mid
+            else:
+                c_high = c_mid
+
+        C[i] = c_high
+
+    # Optional: Quantize consensus weights
+    C = (C / C.sum() * 65_535).int() / 65_535
+
+    # === Consensus Clipped Weight ===
+    W_clipped = torch.min(W, C)
+
+    # === Rank Calculation ===
+    R = (S.view(-1, 1) * W_clipped).sum(dim=0)
+
+    # === Incentive Calculation ===
+    I = (R / R.sum()).nan_to_num(0)
+
+    # === Bonds Calculation ===
+    if B_old is None:
+        B_old = torch.zeros_like(W)
+
+    decay_factor = 1 - decay_rate
+    # Apply decay to old bonds
+    B_decayed = B_old * decay_factor
+
+    # Remaining capacity per bond is cap - B_decayed
+    remaining_capacity = 1.0 - B_decayed
+    remaining_capacity = torch.clamp(remaining_capacity, min=0.0)
+
+    # Purchase increment per validator-miner pair
+    # Each validator can increase bonds by at most bond_alpha per epoch towards the cap
+    purchase_increment = bond_alpha * W  # Validators allocate their purchase across miners based on weights
+    # Ensure that purchase does not exceed remaining capacity
+    purchase = torch.min(purchase_increment, remaining_capacity)
+
+    # Update bonds
+    B = B_decayed + purchase
+    # Ensure bonds do not exceed the cap of 1
+    B = torch.clamp(B, max=1.0)
+
+    # === Dividends Calculation ===
+    # D_i = S_i * sum_j B_ij
+    total_bonds_per_validator = (B * I).sum(dim=1)  # Sum over miners for each validator
+    D = S * total_bonds_per_validator  # Element-wise multiplication
+
+    # Normalize dividends
+    D_normalized = D / (D.sum() + 1e-6)
+
+    return {
+        "weight": W,
+        "stake": S,
+        "server_prerank": P,
+        "server_consensus_weight": C,
+        "consensus_clipped_weight": W_clipped,
+        "server_rank": R,
+        "server_incentive": I,
+        "validator_bonds": B,
+        "validator_reward": D,
+        "validator_reward_normalized": D_normalized
+    }
+
 def mat_ema_sparse(bonds_delta: torch.Tensor, bonds: torch.Tensor, alpha: float) -> torch.Tensor:
     return alpha * bonds_delta + (1 - alpha) * bonds
 
@@ -702,6 +800,12 @@ def run_simulation(
             result = yuma_function(W, S, B_old=B_state, kappa=kappa, decay_rate=0.1, alpha=0.1)
             B_state = result['validator_bonds']
             server_consensus_weight = result['server_consensus_weight']
+        elif yuma_function == Yuma4:
+            if B_state is not None and epoch == reset_bonds_epoch and server_consensus_weight[reset_bonds_miner_index] == 0.0:
+                B_state[:, reset_bonds_miner_index] = 0.0
+            result = yuma_function(W, S, B_old=B_state, kappa=kappa, bond_alpha=0.1, decay_rate=0.1)
+            B_state = result['validator_bonds']
+            server_consensus_weight = result['server_consensus_weight']
         elif yuma_function == YumaRust:
             result = yuma_function(W, S, B_old=B_state, kappa=kappa)
             B_state = result['validator_ema_bond']
@@ -731,12 +835,12 @@ def plot_to_base64():
     Captures the current Matplotlib figure and encodes it as a Base64 string.
     """
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight', dpi=150)  # Use a higher DPI for sharper images
+    plt.savefig(buf, format='png', transparent=True, bbox_inches='tight', dpi=150)  # Use a higher DPI for sharper images
     buf.seek(0)
     encoded_image = base64.b64encode(buf.read()).decode('ascii')
     buf.close()
     plt.close()
-    # Use `max-width` instead of fixed width for responsiveness
+    # Use max-width instead of fixed width for responsiveness
     return f'<img src="data:image/png;base64,{encoded_image}" style="max-width:1200px; height:auto;">'
 
 def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, servers, bond_penalty=1.0):
@@ -831,48 +935,76 @@ def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, 
     # Convert the table to a DataFrame
     summary_table = pd.DataFrame(table_data)
 
-    # The rest of your code remains the same...
+    # custom_css = """
+    # <style>
+    #     .scrollable-table-container {
+    #         width: 100%; 
+    #         overflow-x: auto;
+    #         overflow-y: hidden;
+    #         white-space: nowrap;
+    #         border: 1px solid #ccc;  
+    #         background-color: hsl(0, 0%, 98%);  /* Light background for the table container */
+    #     }
+    #     table {
+    #         border-collapse: collapse;
+    #         table-layout: auto;
+    #         width: auto;
+    #         background-color: hsl(0, 0%, 100%);  /* Pure white table background */
+    #     }
+    #     td, th {
+    #         padding: 10px;
+    #         vertical-align: top;
+    #         text-align: center;
+    #         color: hsl(0, 0%, 20%);  /* Dark text for readability */
+    #     }
+    #     tr:nth-child(even) {
+    #         background-color: hsl(0, 0%, 95%);  /* Light gray for even rows */
+    #     }
+    #     tr:nth-child(odd) {
+    #         background-color: hsl(0, 0%, 100%);  /* Pure white for odd rows */
+    #     }
+    # </style>
+    # """
 
-    # Add custom CSS for scrollable table
     custom_css = """
-        <style>
-            .scrollable-table-container {
-                width: 100%;  /* Full-width container */
-                overflow-x: auto;  /* Enable horizontal scrolling */
-                overflow-y: hidden;  /* Prevent vertical scrolling on the container */
-                white-space: nowrap;  /* Prevent wrapping of table content */
-                border: 1px solid #ccc;  /* Optional border for better visualization */
-            }
-            table {
-                border-collapse: collapse;
-                table-layout: auto;  /* Allow dynamic column resizing */
-                width: auto;  /* Let table width grow as needed */
-            }
-            td, th {
-                padding: 10px;
-                vertical-align: top;
-                text-align: center;
-            }
-            img {
-                display: block;
-                margin: 0 auto;
-                max-width: 100%;  /* Keep image size within its cell */
-                height: auto;  /* Maintain aspect ratio */
-            }
-        </style>
-        """
+<style>
+    .scrollable-table-container {
+        width: 100%; 
+        overflow-x: auto;
+        overflow-y: hidden;
+        white-space: nowrap;
+        border: 1px solid #ccc;  
+        background-color: hsl(0, 0%, 98%) !important;  /* Light background for the table container */
+    }
+    table {
+        border-collapse: collapse;
+        table-layout: auto;
+        width: auto;
+        background-color: hsl(0, 0%, 100%) !important;  /* Pure white table background */
+    }
+    td, th {
+        padding: 10px;
+        vertical-align: top;
+        text-align: center;
+        color: hsl(0, 0%, 20%) !important;  /* Dark text for readability */
+    }
+    tr:nth-child(even) {
+        background-color: hsl(0, 0%, 95%) !important;  /* Light gray for even rows */
+    }
+    tr:nth-child(odd) {
+        background-color: hsl(0, 0%, 100%) !important;  /* Pure white for odd rows */
+    }
+</style>
+"""
 
-    # Convert the DataFrame to an HTML table with custom styles
+
     html_table = summary_table.to_html(escape=False, index=False)
-
-    # Wrap the table in a scrollable div
     scrollable_table = f"""
     <div class="scrollable-table-container">
         {html_table}
     </div>
     """
 
-    # Combine the CSS and scrollable table HTML
     full_html = custom_css + scrollable_table
 
     return HTML(full_html)
@@ -888,9 +1020,6 @@ def plot_results(
     fig, ax_main = plt.subplots(figsize=(14, 6))
 
     num_epochs_calculated = None
-    # marker_styles = ['+', 'x', 'o', 'd']
-    # marker_sizes = [12, 10, 4, 8]
-    # line_styles = ['-', '--', ':', '-.']
     x = None
 
     combined_styles = [
