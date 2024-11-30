@@ -846,6 +846,7 @@ def plot_to_base64():
 def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, servers, bond_penalty=1.0):
     """
     Generates an HTML table with embedded charts for all cases, Yuma versions, and all chart types.
+    Applies alternating background colors for groups of three charts.
     """
     # Initialize the table structure
     table_data = {"Case/Chart Name": []}
@@ -936,39 +937,64 @@ def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, 
     # Convert the table to a DataFrame
     summary_table = pd.DataFrame(table_data)
 
+    # Create CSS for alternating group backgrounds
     custom_css = """
-<style>
-    .scrollable-table-container {
-        width: 100%; 
-        overflow-x: auto;
-        overflow-y: hidden;
-        white-space: nowrap;
-        border: 1px solid #ccc;  
-        background-color: hsl(0, 0%, 98%) !important;  /* Light background for the table container */
-    }
-    table {
-        border-collapse: collapse;
-        table-layout: auto;
-        width: auto;
-        background-color: hsl(0, 0%, 100%) !important;  /* Pure white table background */
-    }
-    td, th {
-        padding: 10px;
-        vertical-align: top;
-        text-align: center;
-        color: hsl(0, 0%, 20%) !important;  /* Dark text for readability */
-    }
-    tr:nth-child(even) {
-        background-color: hsl(0, 0%, 95%) !important;  /* Light gray for even rows */
-    }
-    tr:nth-child(odd) {
-        background-color: hsl(0, 0%, 100%) !important;  /* Pure white for odd rows */
-    }
-</style>
-"""
+    <style>
+        .scrollable-table-container {
+            width: 100%; 
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+            border: 1px solid #ccc;  
+            background-color: hsl(0, 0%, 98%) !important;
+        }
+        table {
+            border-collapse: collapse;
+            table-layout: auto;
+            width: auto;
+            background-color: hsl(0, 0%, 100%) !important;
+        }
+        td, th {
+            padding: 10px;
+            vertical-align: top;
+            text-align: center;
+            color: hsl(0, 0%, 20%) !important;
+        }
+        tr.group-light td {
+            background-color: hsl(0, 0%, 100%) !important;  /* White for light groups */
+        }
+        tr.group-gray td {
+            background-color: hsl(0, 0%, 95%) !important;  /* Light gray for gray groups */
+        }
+    </style>
+    """
 
+    # Convert DataFrame to HTML and assign alternating group classes
+    html_rows = []
+    group_counter = 0
+    for i, row in summary_table.iterrows():
+        # Determine the group (light or gray)
+        group_class = "group-light" if (group_counter // 3) % 2 == 0 else "group-gray"
 
-    html_table = summary_table.to_html(escape=False, index=False)
+        # Convert the row to HTML
+        row_html = f'<tr class="{group_class}">' + ''.join(f'<td>{cell}</td>' for cell in row) + '</tr>'
+        html_rows.append(row_html)
+
+        # Increment group counter
+        group_counter += 1
+
+    # Combine rows and create the final table
+    html_table = f"""
+    <table>
+        <thead>
+            <tr>{''.join(f'<th>{col}</th>' for col in summary_table.columns)}</tr>
+        </thead>
+        <tbody>
+            {''.join(html_rows)}
+        </tbody>
+    </table>
+    """
+
     scrollable_table = f"""
     <div class="scrollable-table-container">
         {html_table}
