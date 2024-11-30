@@ -74,7 +74,7 @@ for epoch in range(40):
     weights_epochs_case_4.append(W)
 
 weights_epochs_case_5 = []
-for epoch in range(80):
+for epoch in range(40):
     W = torch.zeros(3, 2)
     if epoch == 0:
         # Initialy consensus is achieved by all Validators
@@ -87,14 +87,14 @@ for epoch in range(80):
         W[0, 1] = 1.0  # Validator A -> Server 2
         W[1, 1] = 1.0  # Validator B -> Server 2
         W[2, 1] = 1.0  # Validator C -> Server 2
-    elif epoch >= 3 and epoch <= 40:
+    elif epoch >= 3 and epoch <= 20:
         # Subsequent epochs
         W[:, 1] = 1.0  # All validators -> Server 2
-    elif epoch == 41:
+    elif epoch == 21:
         W[0, 1] = 1.0  # Validator A -> Server 2
         W[1, 0] = 1.0  # Validator B -> Server 1
         W[2, 1] = 1.0  # Validator C -> Server 2
-    elif epoch == 42:
+    elif epoch == 22:
         W[0, 1] = 1.0  # Validator A -> Server 2
         W[1, 0] = 1.0  # Validator B -> Server 1
         W[2, 0] = 1.0  # Validator C -> Server 1
@@ -104,7 +104,7 @@ for epoch in range(80):
     weights_epochs_case_5.append(W)
 
 weights_epochs_case_6 = []
-for epoch in range(80):
+for epoch in range(40):
     W = torch.zeros(3, 2)
     if epoch == 0:
         # All validators support Server 1
@@ -118,7 +118,7 @@ for epoch in range(80):
         W[0, 1] = 1.0  # Validator A -> Server 1
         W[1, 1] = 1.0  # Validator B -> Server 2
         W[2, 0] = 1.0  # Validator C -> Server 1
-    elif epoch >= 3 and epoch <= 40:
+    elif epoch >= 3 and epoch <= 20:
         # All validators support Server 2
         W[:, 1] = 1.0
     else:
@@ -127,7 +127,7 @@ for epoch in range(80):
     weights_epochs_case_6.append(W)
 
 weights_epochs_case_7 = []
-for epoch in range(80):
+for epoch in range(40):
     W = torch.zeros(3, 2)
     if epoch == 0:
         # Initialy consensus is achieved by all Validators
@@ -140,10 +140,10 @@ for epoch in range(80):
         W[0, 1] = 1.0  # Validator A -> Server 2
         W[1, 1] = 1.0  # Validator B -> Server 2
         W[2, 1] = 1.0  # Validator C -> Server 2
-    elif epoch >= 3 and epoch <= 40:
+    elif epoch >= 3 and epoch <= 20:
         # Subsequent epochs
         W[:, 1] = 1.0  # All validators -> Server 2
-    elif epoch == 41:
+    elif epoch == 21:
         W[0, 1] = 1.0  # Validator A -> Server 1
         W[1, 1] = 1.0  # Validator B -> Server 1
         W[2, 0] = 1.0  # Validator C -> Server 2
@@ -153,7 +153,7 @@ for epoch in range(80):
     weights_epochs_case_7.append(W)
 
 weights_epochs_case_8 = []
-for epoch in range(80):
+for epoch in range(40):
     W = torch.zeros(3, 2)
     if epoch == 0:
         # Validators B and C support Server 1
@@ -165,11 +165,11 @@ for epoch in range(80):
         W[0, :] = torch.tensor([0.999, 0.001])  # Validator A
         W[1, 1] = 1.0  # Validator B -> Server 2
         W[2, 1] = 1.0  # Validator C -> Server 2
-    elif epoch >= 2 and epoch <= 40:
+    elif epoch >= 2 and epoch <= 20:
         # Validator A copies weights but still supports Server 1 with minimal weight
         W[0, :] = torch.tensor([0.001, 0.999])  # Validator A
         W[1:, 1] = 1.0
-    elif epoch == 41:
+    elif epoch == 21:
         # Validators B and C switch back to Server 1
         W[0, :] = torch.tensor([0.001, 0.999])
         W[1, 0] = 1.0  # Validator B -> Server 1
@@ -229,14 +229,14 @@ for epoch in range(40):
     weights_epochs_case_11.append(W)
 
 weights_epochs_case_12 = []
-for epoch in range(80):
+for epoch in range(40):
     W = torch.zeros(3, 2)
     if epoch == 0:
         # All Validators support server 1
         W[0, 0] = 1.0
         W[1, :] = torch.tensor([0.999, 0.001])
         W[2, 0] = 1.0
-    elif epoch >= 1 and epoch <= 40:
+    elif epoch >= 1 and epoch <= 20:
         # All Validators support server 2
         W[0, 1] = 1.0
         W[1, :] = torch.tensor([0.001, 0.999])
@@ -360,7 +360,7 @@ cases = [
     },
     {
         'name': 'Case 5 - kappa moves second, then third',
-        'num_epochs': 80,
+        'num_epochs': 40,
         'weights_epochs': weights_epochs_case_5,
         'stakes_epochs': [stakes_epochs_case_1] * 80,
         'analysis': analysis_dict['Case 5'],
@@ -368,15 +368,15 @@ cases = [
     },
     {
         'name': 'Case 6 - kappa moves second, then all validators switch',
-        'num_epochs': 80,
+        'num_epochs': 40,
         'weights_epochs': weights_epochs_case_6,
         'stakes_epochs': [stakes_epochs_case_1] * 80,
         'analysis': analysis_dict['Case 6'],
         'validators': ['Big vali.', 'Small eager vali.', 'Small lazy vali.'],
     },
     {
-        'name': 'Case 7 - big vali moves late, then all but one small vali move late',
-        'num_epochs': 80,
+        'name': 'Case 7 - big vali moves late, then all but one small vali moves late',
+        'num_epochs': 40,
         'weights_epochs': weights_epochs_case_7,
         'stakes_epochs': [stakes_epochs_case_1] * 80,
         'analysis': analysis_dict['Case 7'],
@@ -384,11 +384,11 @@ cases = [
     },
     {
         'name': 'Case 8 - big vali moves late, then late',
-        'num_epochs': 80,
+        'num_epochs': 40,
         'weights_epochs': weights_epochs_case_8,
         'stakes_epochs': [stakes_epochs_case_1] * 80,
         'analysis': analysis_dict['Case 8'],
-        'validators': ['Big dishonest vali.', 'Small eager-eager vali.', 'Small eager-eager vali 2.'],
+        'validators': ['Big dishonest lazy vali.', 'Small eager-eager vali.', 'Small eager-eager vali 2.'],
     },
     {
         'name': 'Case 9 - small validators merged',
@@ -416,7 +416,7 @@ cases = [
     },
     {
         'name': 'Case 12 - all validators switch, but small validators support alt miner with minimal weight',
-        'num_epochs': 80,
+        'num_epochs': 40,
         'weights_epochs': weights_epochs_case_12,
         'stakes_epochs': [stakes_epochs_case_1] * 80,
         'analysis': analysis_dict['Case 12'],
