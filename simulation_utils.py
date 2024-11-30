@@ -866,6 +866,7 @@ def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, 
         stakes = case['stakes_epochs']
         validators = case['validators']
         analysis = case['analysis']
+        reset_bonds = case['reset_bonds']
 
         for chart_type in ['weights', 'dividends', 'bonds']:
             chart_base64_dict = {}
@@ -880,7 +881,7 @@ def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, 
 
                 reset_bonds_epoch = None
                 reset_bonds_miner_index = None
-                if yuma_function == Yuma31 or yuma_function == Yuma32:
+                if yuma_function in [Yuma31, Yuma32, Yuma4] and reset_bonds:
                     reset_bonds_epoch = 20
                     reset_bonds_miner_index = 1
                     

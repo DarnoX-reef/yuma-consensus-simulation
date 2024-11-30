@@ -333,6 +333,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 1'],
         'validators': ['Big vali.', 'Small lazy vali.', 'Small lazier vali.'],
+        'reset_bonds': False,
     },
     {
         'name': 'Case 2 - kappa moves second',
@@ -341,6 +342,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 2'],
         'validators': ['Big vali.', 'Small eager vali.', 'Small lazy vali.'],
+        'reset_bonds': False,
     },
     {
         'name': 'Case 3 - kappa moves third',
@@ -349,6 +351,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 3'],
         'validators': ['Big vali.', 'Small eager vali.', 'Small lazy vali.'],
+        'reset_bonds': False,
     },
     {
         'name': 'Case 4 - all validators switch',
@@ -357,6 +360,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 4'],
         'validators': ['Big vali.', 'Small vali.', 'Small vali 2.'],
+        'reset_bonds': False,
     },
     {
         'name': 'Case 5 - kappa moves second, then third',
@@ -365,6 +369,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 80,
         'analysis': analysis_dict['Case 5'],
         'validators': ['Big vali.', 'Small eager-eager vali.', 'Small eager-lazy vali.'],
+        'reset_bonds': True,
     },
     {
         'name': 'Case 6 - kappa moves second, then all validators switch',
@@ -373,6 +378,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 80,
         'analysis': analysis_dict['Case 6'],
         'validators': ['Big vali.', 'Small eager vali.', 'Small lazy vali.'],
+        'reset_bonds': True,
     },
     {
         'name': 'Case 7 - big vali moves late, then all but one small vali moves late',
@@ -381,6 +387,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 80,
         'analysis': analysis_dict['Case 7'],
         'validators': ['Big vali.', 'Small eager-lazy vali.', 'Small eager-eager vali.'],
+        'reset_bonds': True,
     },
     {
         'name': 'Case 8 - big vali moves late, then late',
@@ -389,6 +396,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 80,
         'analysis': analysis_dict['Case 8'],
         'validators': ['Big dishonest lazy vali.', 'Small eager-eager vali.', 'Small eager-eager vali 2.'],
+        'reset_bonds': True,
     },
     {
         'name': 'Case 9 - small validators merged',
@@ -397,6 +405,7 @@ cases = [
         'stakes_epochs': stakes_epochs_case_2,
         'analysis': analysis_dict['Case 9'],
         'validators': ['Big vali.', 'Small vali.', 'Small vali 2.'],
+        'reset_bonds': False,
     },
     {
         'name': 'Case 10 - kappa delayed',
@@ -405,6 +414,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 10'],
         'validators': ['Big delayed vali.', 'Small eager vali.', 'Small lazy vali.'],
+        'reset_bonds': False,
     },
     {
         'name': 'Case 11 - clipping bug',
@@ -413,6 +423,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_3] * 40,
         'analysis': analysis_dict['case_11'],
         'validators': ['Big vali. 1', 'Big vali. 2', 'Small vali.'],
+        'reset_bonds': True,
     },
     {
         'name': 'Case 12 - all validators switch, but small validators support alt miner with minimal weight',
@@ -421,5 +432,6 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 80,
         'analysis': analysis_dict['Case 12'],
         'validators': ['Big vali.', 'Small dishonest vali.', 'Small vali.'],
+        'reset_bonds': True,
     },
 ]
