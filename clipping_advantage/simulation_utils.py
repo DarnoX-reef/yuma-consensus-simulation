@@ -935,37 +935,6 @@ def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, 
     # Convert the table to a DataFrame
     summary_table = pd.DataFrame(table_data)
 
-    # custom_css = """
-    # <style>
-    #     .scrollable-table-container {
-    #         width: 100%; 
-    #         overflow-x: auto;
-    #         overflow-y: hidden;
-    #         white-space: nowrap;
-    #         border: 1px solid #ccc;  
-    #         background-color: hsl(0, 0%, 98%);  /* Light background for the table container */
-    #     }
-    #     table {
-    #         border-collapse: collapse;
-    #         table-layout: auto;
-    #         width: auto;
-    #         background-color: hsl(0, 0%, 100%);  /* Pure white table background */
-    #     }
-    #     td, th {
-    #         padding: 10px;
-    #         vertical-align: top;
-    #         text-align: center;
-    #         color: hsl(0, 0%, 20%);  /* Dark text for readability */
-    #     }
-    #     tr:nth-child(even) {
-    #         background-color: hsl(0, 0%, 95%);  /* Light gray for even rows */
-    #     }
-    #     tr:nth-child(odd) {
-    #         background-color: hsl(0, 0%, 100%);  /* Pure white for odd rows */
-    #     }
-    # </style>
-    # """
-
     custom_css = """
 <style>
     .scrollable-table-container {
@@ -1204,7 +1173,6 @@ def plot_validator_server_weights(
 
 
     plt.xlabel('Epoch')
-    plt.ylabel('Server Supported')
     plt.title(f'Validators Weights to Servers \n{case_name}')
     plt.yticks([1, 2], servers)
     plt.legend()
