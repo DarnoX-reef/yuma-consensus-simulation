@@ -248,6 +248,19 @@ for epoch in range(40):
         W[2, 0] = 1.0
     weights_epochs_case_12.append(W)
 
+weights_epochs_case_13 = []
+for epoch in range(40):
+    W = torch.zeros(3, 2)
+    if epoch <= 20:
+        W[0, 1] = 1.0
+        W[1, :] = torch.tensor([0.5, 0.5])
+        W[2, 1] = 1.0
+    else:
+        W[0, 1] = 1.0
+        W[1, :] = torch.tensor([0.5, 0.5])
+        W[2, :] = torch.tensor([0.5, 0.5])
+    weights_epochs_case_13.append(W)
+
 
 stakes_epochs_case_1 = torch.tensor([0.8, 0.1, 0.1])
 
@@ -322,6 +335,11 @@ analysis_dict = {
         'dividends': "Sed nec velit nec mi",
         'bonds': "Sed nec velit nec mi",
     },
+    'Case 13': {
+        'weights': "Sed nec velit nec mi",
+        'dividends': "Sed nec velit nec mi",
+        'bonds': "Sed nec velit nec mi",
+    }
 }
 
 
@@ -361,45 +379,50 @@ cases = [
         'analysis': analysis_dict['Case 4'],
         'validators': ['Big vali.', 'Small vali.', 'Small vali 2.'],
         'reset_bonds': False,
+        
     },
     {
         'name': 'Case 5 - kappa moves second, then third',
         'num_epochs': 40,
         'weights_epochs': weights_epochs_case_5,
-        'stakes_epochs': [stakes_epochs_case_1] * 80,
+        'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 5'],
         'validators': ['Big vali.', 'Small eager-eager vali.', 'Small eager-lazy vali.'],
         'reset_bonds': True,
+        'reset_bonds_index': 1
     },
     {
         'name': 'Case 6 - kappa moves second, then all validators switch',
         'num_epochs': 40,
         'weights_epochs': weights_epochs_case_6,
-        'stakes_epochs': [stakes_epochs_case_1] * 80,
+        'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 6'],
         'validators': ['Big vali.', 'Small eager vali.', 'Small lazy vali.'],
         'reset_bonds': True,
+        'reset_bonds_index': 1
     },
     {
         'name': 'Case 7 - big vali moves late, then all but one small vali moves late',
         'num_epochs': 40,
         'weights_epochs': weights_epochs_case_7,
-        'stakes_epochs': [stakes_epochs_case_1] * 80,
+        'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 7'],
         'validators': ['Big vali.', 'Small eager-lazy vali.', 'Small eager-eager vali.'],
         'reset_bonds': True,
+        'reset_bonds_index': 1
     },
     {
         'name': 'Case 8 - big vali moves late, then late',
         'num_epochs': 40,
         'weights_epochs': weights_epochs_case_8,
-        'stakes_epochs': [stakes_epochs_case_1] * 80,
+        'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 8'],
         'validators': ['Big dishonest lazy vali.', 'Small eager-eager vali.', 'Small eager-eager vali 2.'],
         'reset_bonds': True,
+        'reset_bonds_index': 1
     },
     {
-        'name': 'Case 9 - small validators merged',
+        'name': 'Case 9 - small validators merged in e5',
         'num_epochs': 40,
         'weights_epochs': weights_epochs_case_9,
         'stakes_epochs': stakes_epochs_case_2,
@@ -424,14 +447,26 @@ cases = [
         'analysis': analysis_dict['case_11'],
         'validators': ['Big vali. 1', 'Big vali. 2', 'Small vali.'],
         'reset_bonds': True,
+        'reset_bonds_index': 1
     },
     {
         'name': 'Case 12 - all validators switch, but small validators support alt miner with minimal weight',
         'num_epochs': 40,
         'weights_epochs': weights_epochs_case_12,
-        'stakes_epochs': [stakes_epochs_case_1] * 80,
+        'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 12'],
         'validators': ['Big vali.', 'Small dishonest vali.', 'Small vali.'],
         'reset_bonds': True,
+        'reset_bonds_index': 1
     },
+    {
+        'name': 'Case 13 - Big vali supports server 2, small validator/s support server 1',
+        'num_epochs': 40,
+        'weights_epochs': weights_epochs_case_13,
+        'stakes_epochs': [stakes_epochs_case_1] * 40,
+        'analysis': analysis_dict['Case 13'],
+        'validators': ['Big vali.', 'Small vali.', 'Small vali 2.'],
+        'reset_bonds': True,
+        'reset_bonds_index': 0
+    }
 ]

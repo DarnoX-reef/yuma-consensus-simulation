@@ -884,7 +884,7 @@ def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, 
                 reset_bonds_miner_index = None
                 if yuma_function in [Yuma31, Yuma32, Yuma4] and reset_bonds:
                     reset_bonds_epoch = 20
-                    reset_bonds_miner_index = 1
+                    reset_bonds_miner_index = case['reset_bonds_index']
                     
                 # Run simulation to get dividends and bonds
                 dividends_per_validator, bonds_per_epoch = run_simulation(
@@ -1107,7 +1107,6 @@ def plot_bonds(
 ):
     x = list(range(num_epochs))
 
-    # Create a figure with two horizontally aligned subplots
     fig, axes = plt.subplots(1, 2, figsize=(14, 5), sharex=True, sharey=True)
     fig.suptitle(f'Validators bonds per Server\n{case_name}', fontsize=14)
 
@@ -1117,13 +1116,11 @@ def plot_bonds(
         (':', 'o', 4, 1)
     ]
 
-    # Assign styles to each validator
     validator_styles = {
         validator: combined_styles[idx % len(combined_styles)]
         for idx, validator in enumerate(validators)
     }
 
-    # To collect handles for the shared legend
     handles = []
     labels = []
 
@@ -1145,23 +1142,19 @@ def plot_bonds(
                 markersize=markersize,
                 markeredgewidth=markeredgewidth,
                 linestyle=linestyle,
-                linewidth=2  # Optional: Adjust line width for better visibility
+                linewidth=2
             )
             if idx_s == 0:
-                # Only add labels for the first subplot to create a shared legend
                 handles.append(line)
                 labels.append(validator)
 
-        # Configure each subplot for one server
         ax.set_xlabel('Epoch')
         ax.set_ylabel('Bond Value' if idx_s == 0 else '')
         ax.set_title(f'{server}')
         ax.grid(True)
 
-    # Create a single shared legend below the subplots
     fig.legend(handles, labels, loc='lower center', ncol=len(validators), bbox_to_anchor=(0.5, 0.02))
 
-    # Adjust layout to make room for the legend
     plt.tight_layout(rect=[0, 0.05, 0.98, 0.95])  # [left, bottom, right, top]
 
     if to_base64:
@@ -1176,36 +1169,76 @@ def plot_validator_server_weights(
     case_name: str,
     to_base64: bool = False,
 ):
-    marker_styles = ['+', 'x', '*', 'd']
-    marker_sizes = [14, 10, 8, 8]
-    line_styles = ['-', '--', ':', '-.']
 
-    plt.figure(figsize=(14, 1))
+    marker_styles = ['+', 'x', '*']
+    line_styles = ['-', '--', ':']
+    marker_sizes = [14, 10, 8]
+
+    y_values_all = [
+        weights_epochs[epoch][idx_v][1].item()
+        for idx_v in range(len(validators))
+        for epoch in range(num_epochs)
+    ]
+    unique_y_values = sorted(set(y_values_all))
+
+    min_label_distance = 0.05
+    close_to_server_threshold = 0.02
+
+    def is_round_number(y):
+        return abs((y * 20) - round(y * 20)) < 1e-6
+    y_tick_positions = [0.0, 1.0]
+    y_tick_labels = [servers[0], servers[1]]
+
+    # Process other y-values
+    for y in unique_y_values:
+        if y in [0.0, 1.0]:
+            continue  # Already added servers
+        if abs(y - 0.0) < close_to_server_threshold or abs(y - 1.0) < close_to_server_threshold:
+            continue  # Skip y-values too close to server labels
+        # Check if y is a round number
+        if is_round_number(y):
+            # Check distance to existing y-ticks
+            if all(abs(y - existing_y) >= min_label_distance for existing_y in y_tick_positions):
+                y_tick_positions.append(y)
+                # Format label without unnecessary zeros
+                label = ('%f' % y).rstrip('0').rstrip('.')
+                y_tick_labels.append(label)
+        else:
+            # For non-round numbers, only add if not too close
+            if all(abs(y - existing_y) >= min_label_distance for existing_y in y_tick_positions):
+                y_tick_positions.append(y)
+                label = ('%f' % y).rstrip('0').rstrip('.')
+                y_tick_labels.append(label)
+
+    if len(y_tick_positions) <= 2:
+        fig_height = 1
+    else:
+        fig_height = 3
+
+    plt.figure(figsize=(14, fig_height))
+    plt.ylim(-0.05, 1.05)
+
     for idx_v, validator in enumerate(validators):
-        server_over_time = []
-        for epoch in range(num_epochs):
-            W = weights_epochs[epoch]
-            validator_weights = W[idx_v]  # weights given by validator idx_v at epoch
-            server_idx = torch.argmax(validator_weights).item()
-            server_supported = server_idx + 1  # Add 1 so that servers are 1 and 2
-            server_over_time.append(server_supported)
+        y_values = [weights_epochs[epoch][idx_v][1].item() for epoch in range(num_epochs)]
         plt.plot(
             range(num_epochs),
-            server_over_time,
+            y_values,
             label=validator,
-            marker=marker_styles.pop(0),
-            markersize=marker_sizes.pop(0),
-            linestyle=line_styles.pop(0)
+            marker=marker_styles[idx_v % len(marker_styles)],
+            linestyle=line_styles[idx_v % len(line_styles)],
+            markersize=marker_sizes[idx_v % len(marker_sizes)],
+            linewidth=2
         )
-
 
     plt.xlabel('Epoch')
     plt.title(f'Validators Weights to Servers \n{case_name}')
-    plt.yticks([1, 2], servers)
+    plt.yticks(y_tick_positions, y_tick_labels)
     plt.legend()
     plt.grid(True)
 
-    tick_locs = [0, 1, 2] + list(range(5, num_epochs, 5))  # First 3 ticks and then every 5th epoch
+    tick_locs = list(range(0, num_epochs, 5))
+    if 0 not in tick_locs:
+        tick_locs.insert(0, 0)
     plt.xticks(tick_locs, [str(i) for i in tick_locs])
 
     if to_base64:
@@ -1252,11 +1285,13 @@ servers = ['Server 1', 'Server 2']
 total_emission = 100 # We assume this is the total emission in tao per epoch for the subnet
 total_stake_tao = 1_000_000  # Total stake in the network
 
-case_name = cases[9]['name']
-num_epochs = cases[9]['num_epochs']
-weights_epochs = cases[9]['weights_epochs']
-stakes = cases[9]['stakes_epochs']
-validators = cases[9]['validators']
+case_name = cases[12]['name']
+num_epochs = cases[12]['num_epochs']
+weights_epochs = cases[12]['weights_epochs']
+stakes = cases[12]['stakes_epochs']
+validators = cases[12]['validators']
+reset_bonds = cases[12]['reset_bonds']
+reset_bonds_miner_index = cases[12]['reset_bonds_index']
 
 dividends_per_validator, bonds_per_epoch = run_simulation(
     validators=validators,
@@ -1265,5 +1300,7 @@ dividends_per_validator, bonds_per_epoch = run_simulation(
     num_epochs=num_epochs,
     total_emission=total_emission,
     total_stake_tao=total_stake_tao,
-    yuma_function=Yuma2
+    yuma_function=Yuma32,
+    reset_bonds_epoch=20,
+    reset_bonds_miner_index=reset_bonds_miner_index
 )
