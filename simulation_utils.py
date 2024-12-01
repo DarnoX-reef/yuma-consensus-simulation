@@ -652,8 +652,13 @@ def Yuma4(
     B_old: Optional[torch.Tensor] = None,
     kappa: float = 0.5,
     bond_alpha: float = 0.1,
+    liquid_alpha: bool = False,
+    alpha_high: float = 0.9,
     decay_rate: float = 0.1,
+    alpha_low: float = 0.7,
     precision: int = 100_000,
+    override_consensus_high: Optional[float] = None,
+    override_consensus_low: Optional[float] = None
 ) -> Dict[str, torch.Tensor]:
     """
     Yuma4 function with per-bond cap of 1 and decay.
@@ -703,9 +708,22 @@ def Yuma4(
     if B_old is None:
         B_old = torch.zeros_like(W)
 
-    decay_factor = 1 - decay_rate
+    # === Liquid Alpha Adjustment ===
+    a = b = None
+    if liquid_alpha:
+        consensus_high = override_consensus_high if override_consensus_high is not None else C.quantile(0.75)
+        consensus_low = override_consensus_low if override_consensus_low is not None else C.quantile(0.25)
+
+        if consensus_high == consensus_low:
+            consensus_high = C.quantile(0.99)
+
+        a = (math.log(1 / alpha_high - 1) - math.log(1 / alpha_low - 1)) / (consensus_low - consensus_high)
+        b = math.log(1 / alpha_low - 1) + a * consensus_low
+        alpha = 1 / (1 + math.e ** (-a * C + b))  # alpha to the old weight
+        bond_alpha = 1 - torch.clamp(alpha, alpha_low, alpha_high)
+
     # Apply decay to old bonds
-    B_decayed = B_old * decay_factor
+    B_decayed = B_old * (1 - bond_alpha)
 
     # Remaining capacity per bond is cap - B_decayed
     remaining_capacity = 1.0 - B_decayed
@@ -723,7 +741,6 @@ def Yuma4(
     B = torch.clamp(B, max=1.0)
 
     # === Dividends Calculation ===
-    # D_i = S_i * sum_j B_ij
     total_bonds_per_validator = (B * I).sum(dim=1)  # Sum over miners for each validator
     D = S * total_bonds_per_validator  # Element-wise multiplication
 
@@ -803,7 +820,7 @@ def run_simulation(
         elif yuma_function == Yuma4:
             if B_state is not None and epoch == reset_bonds_epoch and server_consensus_weight[reset_bonds_miner_index] == 0.0:
                 B_state[:, reset_bonds_miner_index] = 0.0
-            result = yuma_function(W, S, B_old=B_state, kappa=kappa, bond_alpha=0.1, decay_rate=0.1)
+            result = yuma_function(W, S, B_old=B_state, kappa=kappa, bond_alpha=0.1, decay_rate=0.1, liquid_alpha=liquid_alpha)
             B_state = result['validator_bonds']
             server_consensus_weight = result['server_consensus_weight']
         elif yuma_function == YumaRust:
@@ -877,13 +894,13 @@ def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, 
                     full_case_name = f"{full_case_name} - beta={bond_penalty}"
 
                 liquid_alpha = False
-                if yuma_version == "Yuma 1 (paper) - liquid alpha on":
+                if yuma_version in ["Yuma 1 (paper) - liquid alpha on", "Yuma 4 (Rhef+relative bonds) - liquid alpha on"]:
                     liquid_alpha = True
 
                 reset_bonds_epoch = None
                 reset_bonds_miner_index = None
                 if yuma_function in [Yuma31, Yuma32, Yuma4] and reset_bonds:
-                    reset_bonds_epoch = 20
+                    reset_bonds_epoch = case['reset_bonds_epoch']
                     reset_bonds_miner_index = case['reset_bonds_index']
                     
                 # Run simulation to get dividends and bonds
@@ -1285,13 +1302,12 @@ servers = ['Server 1', 'Server 2']
 total_emission = 100 # We assume this is the total emission in tao per epoch for the subnet
 total_stake_tao = 1_000_000  # Total stake in the network
 
-case_name = cases[12]['name']
-num_epochs = cases[12]['num_epochs']
-weights_epochs = cases[12]['weights_epochs']
-stakes = cases[12]['stakes_epochs']
-validators = cases[12]['validators']
-reset_bonds = cases[12]['reset_bonds']
-reset_bonds_miner_index = cases[12]['reset_bonds_index']
+case_name = cases[0]['name']
+num_epochs = cases[0]['num_epochs']
+weights_epochs = cases[0]['weights_epochs']
+stakes = cases[0]['stakes_epochs']
+validators = cases[0]['validators']
+reset_bonds = cases[0]['reset_bonds']
 
 dividends_per_validator, bonds_per_epoch = run_simulation(
     validators=validators,
@@ -1300,7 +1316,6 @@ dividends_per_validator, bonds_per_epoch = run_simulation(
     num_epochs=num_epochs,
     total_emission=total_emission,
     total_stake_tao=total_stake_tao,
-    yuma_function=Yuma32,
-    reset_bonds_epoch=20,
-    reset_bonds_miner_index=reset_bonds_miner_index
+    yuma_function=Yuma4,
+    liquid_alpha=True,
 )
