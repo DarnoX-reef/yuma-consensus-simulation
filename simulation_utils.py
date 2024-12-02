@@ -376,7 +376,7 @@ def Yuma3(
     B_old: Optional[torch.Tensor] = None,
     kappa: float = 0.5,
     decay_rate: float = 0.1,
-    alpha: float = 0.1,
+    alpha: float = 0.025,
     maxint: int = 2 ** 64 - 1,
     precision: int = 100_000
 ) -> Dict[str, torch.Tensor]:
@@ -468,7 +468,7 @@ def Yuma31(
     B_old: Optional[torch.Tensor] = None,
     kappa: float = 0.5,
     decay_rate: float = 0.1,
-    alpha: float = 0.1,
+    alpha: float = 0.025,
     maxint: int = 2 ** 64 - 1,
     precision: int = 100_000,
 ) -> Dict[str, torch.Tensor]:
@@ -560,7 +560,7 @@ def Yuma32(
     B_old: Optional[torch.Tensor] = None,
     kappa: float = 0.5,
     decay_rate: float = 0.1,
-    alpha: float = 0.1,
+    alpha: float = 0.025,
     maxint: int = 2 ** 64 - 1,
     precision: int = 100_000,
 ) -> Dict[str, torch.Tensor]:
@@ -651,7 +651,7 @@ def Yuma4(
     S: torch.Tensor,
     B_old: Optional[torch.Tensor] = None,
     kappa: float = 0.5,
-    bond_alpha: float = 0.1,
+    bond_alpha: float = 0.025,
     liquid_alpha: bool = False,
     alpha_high: float = 0.9,
     decay_rate: float = 0.1,
@@ -885,6 +885,7 @@ def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, 
         validators = case['validators']
         analysis = case['analysis']
         reset_bonds = case['reset_bonds']
+        base_validator = case['base_validator']
 
         for chart_type in ['weights', 'dividends', 'bonds']:
             chart_base64_dict = {}
@@ -934,6 +935,7 @@ def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, 
                         validators=validators,
                         dividends_per_validator=dividends_per_validator,
                         case=full_case_name,
+                        base_validator=base_validator,
                         to_base64=True
                     )
                 elif chart_type == 'bonds':
@@ -1023,12 +1025,16 @@ def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, 
     return HTML(full_html)
 
 def plot_results(
-        num_epochs: int,
-        validators: list[str],
-        dividends_per_validator: Dict[str, List[float]],
-        case: str,
-        to_base64: bool = False
-        ):
+    num_epochs: int,
+    validators: list[str],
+    dividends_per_validator: Dict[str, List[float]],
+    case: str,
+    base_validator: str,
+    to_base64: bool = False
+):
+    import matplotlib.pyplot as plt
+    import numpy as np
+
     plt.close('all')  # Close all open figures
     fig, ax_main = plt.subplots(figsize=(14, 6))
 
@@ -1046,9 +1052,11 @@ def plot_results(
         for idx, validator in enumerate(validators)
     }
 
-    total_dividends, base_validator, percentage_diff_vs_base = calculate_total_dividends(
+    # Calculate total dividends and percentage differences
+    total_dividends, percentage_diff_vs_base = calculate_total_dividends(
         validators,
         dividends_per_validator,
+        base_validator,
         num_epochs
     )
 
@@ -1072,13 +1080,20 @@ def plot_results(
         linestyle, marker, markersize, markeredgewidth = validator_styles[validator]
 
         total_dividend = total_dividends[validator]
-        if validator == base_validator:
-            label = f"(Base) {validator}: Total = {total_dividend:.6f}"
+
+        percentage_diff = percentage_diff_vs_base[validator]
+
+        # Format percentage difference with appropriate sign
+        if percentage_diff > 0:
+            percentage_str = f"(+{percentage_diff:.1f}%)"
+        elif percentage_diff < 0:
+            percentage_str = f"({percentage_diff:.1f}%)"
         else:
-            percentage_diff = percentage_diff_vs_base[validator]
-            label = f"{validator}: Total = {total_dividend:.6f} (+{percentage_diff:.1f}% vs. Base)"
+            percentage_str = "(Base)"
 
+        label = f"{validator}: Total = {total_dividend:.6f} {percentage_str}"
 
+        # Plot with the specified style (line colors remain unchanged)
         ax_main.plot(
             x_shifted,
             dividends,
@@ -1088,6 +1103,7 @@ def plot_results(
             label=label,
             alpha=0.7,
             linestyle=linestyle
+            # Do not set color here; keep default
         )
 
     # Adjust tick locations and labels for the main chart
@@ -1095,14 +1111,15 @@ def plot_results(
     tick_labels = [str(i) for i in tick_locs]
 
     ax_main.set_xticks(tick_locs)
-    ax_main.set_xticklabels(tick_labels, fontsize=8)  # Bring back x-axis ticks
+    ax_main.set_xticklabels(tick_labels, fontsize=8)
     ax_main.set_xlabel('Time (Epochs)')
     ax_main.set_ylim(bottom=0)
-    ax_main.set_xlabel('Time (Epochs)')
     ax_main.set_ylabel('Dividend per 1,000 Tao per Epoch')
     ax_main.set_title(f'{case}')
-    ax_main.legend()
     ax_main.grid(True)
+
+    # Add legend with validator names and percentage differences
+    ax_main.legend()
 
     if case.startswith("Case 4"):
         ax_main.set_ylim(0, 0.042)  # Set specific height for Case 4
@@ -1111,7 +1128,6 @@ def plot_results(
 
     if to_base64:
         return plot_to_base64()
-    
     plt.show()
 
 def plot_bonds(
@@ -1186,11 +1202,14 @@ def plot_validator_server_weights(
     case_name: str,
     to_base64: bool = False,
 ):
+    import matplotlib.pyplot as plt
 
+    # Define markers, line styles, and sizes
     marker_styles = ['+', 'x', '*']
     line_styles = ['-', '--', ':']
     marker_sizes = [14, 10, 8]
 
+    # Collect all y-values from weights_epochs
     y_values_all = [
         weights_epochs[epoch][idx_v][1].item()
         for idx_v in range(len(validators))
@@ -1198,11 +1217,15 @@ def plot_validator_server_weights(
     ]
     unique_y_values = sorted(set(y_values_all))
 
+    # Define thresholds
     min_label_distance = 0.05
     close_to_server_threshold = 0.02
 
+    # Function to determine if a value is a round number (e.g., multiples of 0.05)
     def is_round_number(y):
-        return abs((y * 20) - round(y * 20)) < 1e-6
+        return abs((y * 20) - round(y * 20)) < 1e-6  # Checks if value is a multiple of 0.05
+
+    # Initialize y-ticks with server labels
     y_tick_positions = [0.0, 1.0]
     y_tick_labels = [servers[0], servers[1]]
 
@@ -1217,26 +1240,38 @@ def plot_validator_server_weights(
             # Check distance to existing y-ticks
             if all(abs(y - existing_y) >= min_label_distance for existing_y in y_tick_positions):
                 y_tick_positions.append(y)
-                # Format label without unnecessary zeros
-                label = ('%f' % y).rstrip('0').rstrip('.')
+                # Format label as integer percentage if no decimal part, else one decimal
+                y_percentage = y * 100
+                label = f'{y_percentage:.0f}%'
                 y_tick_labels.append(label)
         else:
             # For non-round numbers, only add if not too close
             if all(abs(y - existing_y) >= min_label_distance for existing_y in y_tick_positions):
                 y_tick_positions.append(y)
-                label = ('%f' % y).rstrip('0').rstrip('.')
+                # Format label as percentage with one decimal place
+                y_percentage = y * 100
+                label = f'{y_percentage:.0f}%'
                 y_tick_labels.append(label)
 
-    if len(y_tick_positions) <= 2:
-        fig_height = 1
-    else:
-        fig_height = 3
+    # Sort y-ticks and labels together
+    ticks = list(zip(y_tick_positions, y_tick_labels))
+    ticks.sort()
+    y_tick_positions, y_tick_labels = zip(*ticks)
+    y_tick_positions = list(y_tick_positions)
+    y_tick_labels = list(y_tick_labels)
 
+    # Determine figure height based on the number of y-ticks
+    fig_height = 1 if len(y_tick_positions) <= 2 else 3
     plt.figure(figsize=(14, fig_height))
+
+    # Set y-limits
     plt.ylim(-0.05, 1.05)
 
+    # Plot the data
     for idx_v, validator in enumerate(validators):
-        y_values = [weights_epochs[epoch][idx_v][1].item() for epoch in range(num_epochs)]
+        y_values = [
+            weights_epochs[epoch][idx_v][1].item() for epoch in range(num_epochs)
+        ]
         plt.plot(
             range(num_epochs),
             y_values,
@@ -1249,10 +1284,13 @@ def plot_validator_server_weights(
 
     plt.xlabel('Epoch')
     plt.title(f'Validators Weights to Servers \n{case_name}')
+
+    # Set y-ticks and labels
     plt.yticks(y_tick_positions, y_tick_labels)
     plt.legend()
     plt.grid(True)
 
+    # Set x-axis ticks
     tick_locs = list(range(0, num_epochs, 5))
     if 0 not in tick_locs:
         tick_locs.insert(0, 0)
@@ -1265,15 +1303,15 @@ def plot_validator_server_weights(
 def calculate_total_dividends(
     validators: List[str],
     dividends_per_validator: Dict[str, List[float]],
+    base_validator: str,
     num_epochs: int = 30
-) -> Tuple[Dict[str, float], str, Dict[str, float]]:
+) -> Tuple[Dict[str, float], Dict[str, float]]:
     """
     Calculates the total dividends per validator and computes the percentage difference
-    relative to the validator with the lowest total dividend (the base).
-    
+    relative to the provided base validator.
+
     Returns:
         total_dividends: Dict mapping validator names to their total dividends.
-        base_validator: The name of the validator with the lowest total dividend.
         percentage_diff_vs_base: Dict mapping validator names to their percentage difference vs. base.
     """
     total_dividends = {}
@@ -1282,8 +1320,7 @@ def calculate_total_dividends(
         total_dividend = sum(dividends)
         total_dividends[validator] = total_dividend
 
-    # Identify the base validator (validator with the lowest total dividend)
-    base_validator = min(total_dividends, key=total_dividends.get)
+    # Get base dividend
     base_dividend = total_dividends[base_validator]
 
     # Compute percentage difference vs base for each validator
@@ -1295,7 +1332,9 @@ def calculate_total_dividends(
             percentage_diff = ((total_dividend - base_dividend) / base_dividend) * 100.0
             percentage_diff_vs_base[validator] = percentage_diff
 
-    return total_dividends, base_validator, percentage_diff_vs_base
+    return total_dividends, percentage_diff_vs_base
+
+
 
 servers = ['Server 1', 'Server 2']
 
