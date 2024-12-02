@@ -141,7 +141,7 @@ def YumaRust(
         "consensus": C,
         "clipped_weight": W_clipped,
         "rank": R,
-        "incentive": I,
+        "server_incentive": I,
         "trust": T,
         "validator_trust": T_v,
         "bond": B,
@@ -723,7 +723,8 @@ def Yuma4(
         bond_alpha = 1 - torch.clamp(alpha, alpha_low, alpha_high)
 
     # Apply decay to old bonds
-    B_decayed = B_old * (1 - bond_alpha)
+    
+    B_decayed = B_old *  (1 - bond_alpha)
 
     # Remaining capacity per bond is cap - B_decayed
     remaining_capacity = 1.0 - B_decayed
@@ -783,6 +784,7 @@ def run_simulation(
     """
     dividends_per_validator = {validator: [] for validator in validators}
     bonds_per_epoch = []
+    server_incentives_per_epoch = []
     B_state: Optional[torch.Tensor] = None
     W_prev: Optional[torch.Tensor] = None
     server_consensus_weight: Optional[torch.Tensor] = None
@@ -844,8 +846,9 @@ def run_simulation(
             dividends_per_validator[validator].append(dividend_per_1000_tao)
 
         bonds_per_epoch.append(B_state.clone())
+        server_incentives_per_epoch.append(result['server_incentive'])
 
-    return dividends_per_validator, bonds_per_epoch
+    return dividends_per_validator, bonds_per_epoch, server_incentives_per_epoch
 
 def plot_to_base64():
     """
@@ -866,18 +869,16 @@ def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, 
     Applies alternating background colors for groups of three charts.
     """
     # Initialize the table structure
-    table_data = {"Case/Chart Name": []}
+    table_data = {}
     for _, yuma_version in yuma_versions:
         table_data[yuma_version] = []
 
     def process_chart(chart_type, case_name, analysis, table_data, chart_base64_dict):
-        row_content = f"{case_name} - {chart_type.capitalize()}<br><small>{analysis.get(chart_type, 'No analysis available.')}</small>"
-        if row_content not in table_data["Case/Chart Name"]:
-            table_data["Case/Chart Name"].append(row_content)
         for yuma_version, chart_base64 in chart_base64_dict.items():
-            table_data[yuma_version].append(chart_base64)
+            content = f"{chart_base64}"
+            table_data[yuma_version].append(content)
 
-    for case in cases:
+    for idx, case in enumerate(cases):
         case_name = case['name']
         num_epochs = case['num_epochs']
         weights_epochs = case['weights_epochs']
@@ -887,7 +888,12 @@ def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, 
         reset_bonds = case['reset_bonds']
         base_validator = case['base_validator']
 
-        for chart_type in ['weights', 'dividends', 'bonds']:
+        if idx in [9, 10]:
+            chart_types = ['weights', 'dividends', 'bonds', 'incentives']
+        else:
+            chart_types = ['weights', 'dividends', 'bonds']
+
+        for chart_type in chart_types:
             chart_base64_dict = {}
             for yuma_function, yuma_version in yuma_versions:
                 full_case_name = f"{case_name} - {yuma_version}"
@@ -903,9 +909,9 @@ def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, 
                 if yuma_function in [Yuma31, Yuma32, Yuma4] and reset_bonds:
                     reset_bonds_epoch = case['reset_bonds_epoch']
                     reset_bonds_miner_index = case['reset_bonds_index']
-                    
+
                 # Run simulation to get dividends and bonds
-                dividends_per_validator, bonds_per_epoch = run_simulation(
+                dividends_per_validator, bonds_per_epoch, server_incentives_per_epoch = run_simulation(
                     validators=validators,
                     stakes=stakes,
                     weights=weights_epochs,
@@ -944,6 +950,14 @@ def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, 
                         validators=validators,
                         servers=servers,
                         bonds_per_epoch=bonds_per_epoch,
+                        case_name=full_case_name,
+                        to_base64=True
+                    )
+                elif chart_type == 'incentives':
+                    chart_base64 = plot_incentives(
+                        servers=servers,
+                        server_incentives_per_epoch=server_incentives_per_epoch,
+                        num_epochs=num_epochs,
                         case_name=full_case_name,
                         to_base64=True
                     )
@@ -988,15 +1002,20 @@ def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, 
     </style>
     """
 
-    # Convert DataFrame to HTML and assign alternating group classes
+    # Generate the table rows
     html_rows = []
     group_counter = 0
-    for i, row in summary_table.iterrows():
+    num_rows = len(next(iter(table_data.values())))  # Number of rows based on one of the columns
+    for i in range(num_rows):
         # Determine the group (light or gray)
         group_class = "group-light" if (group_counter // 3) % 2 == 0 else "group-gray"
 
-        # Convert the row to HTML
-        row_html = f'<tr class="{group_class}">' + ''.join(f'<td>{cell}</td>' for cell in row) + '</tr>'
+        # Build the row HTML
+        row_html = f'<tr class="{group_class}">'
+        for yuma_version in summary_table.columns:
+            cell_content = summary_table[yuma_version][i]
+            row_html += f'<td>{cell_content}</td>'
+        row_html += '</tr>'
         html_rows.append(row_html)
 
         # Increment group counter
@@ -1300,6 +1319,31 @@ def plot_validator_server_weights(
         return plot_to_base64()
     plt.show()
 
+def plot_incentives(
+    servers: List[str],
+    server_incentives_per_epoch: List[torch.Tensor],
+    num_epochs: int,
+    case_name: str,
+    to_base64: bool = False
+):
+    x = np.arange(num_epochs)
+    plt.figure(figsize=(14, 3))
+
+    for idx_s, server in enumerate(servers):
+        incentives = [server_incentives[idx_s].item() for server_incentives in server_incentives_per_epoch]
+        plt.plot(x, incentives, label=server)
+
+    plt.xlabel('Epoch')
+    plt.ylabel('Server Incentive')
+    plt.title(f'Server Incentives\n{case_name}')
+    plt.ylim(-0.05, 1.05)
+    plt.legend()
+    plt.grid(True)
+
+    if to_base64:
+        return plot_to_base64()
+    plt.show()
+
 def calculate_total_dividends(
     validators: List[str],
     dividends_per_validator: Dict[str, List[float]],
@@ -1336,25 +1380,25 @@ def calculate_total_dividends(
 
 
 
-servers = ['Server 1', 'Server 2']
+# servers = ['Server 1', 'Server 2']
 
-total_emission = 100 # We assume this is the total emission in tao per epoch for the subnet
-total_stake_tao = 1_000_000  # Total stake in the network
+# total_emission = 100 # We assume this is the total emission in tao per epoch for the subnet
+# total_stake_tao = 1_000_000  # Total stake in the network
 
-case_name = cases[0]['name']
-num_epochs = cases[0]['num_epochs']
-weights_epochs = cases[0]['weights_epochs']
-stakes = cases[0]['stakes_epochs']
-validators = cases[0]['validators']
-reset_bonds = cases[0]['reset_bonds']
+# case_name = cases[1]['name']
+# num_epochs = cases[1]['num_epochs']
+# weights_epochs = cases[1]['weights_epochs']
+# stakes = cases[1]['stakes_epochs']
+# validators = cases[1]['validators']
+# reset_bonds = cases[1]['reset_bonds']
 
-dividends_per_validator, bonds_per_epoch = run_simulation(
-    validators=validators,
-    stakes=stakes,
-    weights=weights_epochs,
-    num_epochs=num_epochs,
-    total_emission=total_emission,
-    total_stake_tao=total_stake_tao,
-    yuma_function=Yuma4,
-    liquid_alpha=True,
-)
+# dividends_per_validator, bonds_per_epoch = run_simulation(
+#     validators=validators,
+#     stakes=stakes,
+#     weights=weights_epochs,
+#     num_epochs=num_epochs,
+#     total_emission=total_emission,
+#     total_stake_tao=total_stake_tao,
+#     yuma_function=Yuma,
+#     liquid_alpha=True,
+# )
