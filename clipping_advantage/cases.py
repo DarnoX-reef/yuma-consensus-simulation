@@ -366,6 +366,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 1'],
         'validators': ['Big vali.', 'Small lazy vali.', 'Small lazier vali.'],
+        'base_validator': 'Big vali.',
         'reset_bonds': False,
     },
     {
@@ -375,6 +376,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 2'],
         'validators': ['Big vali.', 'Small eager vali.', 'Small lazy vali.'],
+        'base_validator': 'Small eager vali.',
         'reset_bonds': False,
     },
     {
@@ -384,6 +386,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 3'],
         'validators': ['Big vali.', 'Small eager vali.', 'Small lazy vali.'],
+        'base_validator': 'Small eager vali.',
         'reset_bonds': False,
     },
     {
@@ -393,6 +396,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 4'],
         'validators': ['Big vali.', 'Small vali.', 'Small vali 2.'],
+        'base_validator': 'Big vali.',
         'reset_bonds': False,
         
     },
@@ -403,6 +407,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 5'],
         'validators': ['Big vali.', 'Small eager-eager vali.', 'Small eager-lazy vali.'],
+        'base_validator': 'Small eager-eager vali.',
         'reset_bonds': True,
         'reset_bonds_index': 1,
         'reset_bonds_epoch': 20
@@ -414,6 +419,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 6'],
         'validators': ['Big vali.', 'Small eager vali.', 'Small lazy vali.'],
+        'base_validator': 'Small eager vali.',
         'reset_bonds': True,
         'reset_bonds_index': 0,
         'reset_bonds_epoch': 21,
@@ -425,6 +431,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 7'],
         'validators': ['Big vali.', 'Small eager-lazy vali.', 'Small eager-eager vali.'],
+        'base_validator': 'Small eager-eager vali.',
         'reset_bonds': True,
         'reset_bonds_index': 0,
         'reset_bonds_epoch': 21,
@@ -436,6 +443,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 8'],
         'validators': ['Big dishonest lazy vali.', 'Small eager-eager vali.', 'Small eager-eager vali 2.'],
+        'base_validator': 'Small eager-eager vali.',
         'reset_bonds': True,
         'reset_bonds_index': 1,
         'reset_bonds_epoch': 20
@@ -447,6 +455,7 @@ cases = [
         'stakes_epochs': stakes_epochs_case_2,
         'analysis': analysis_dict['Case 9'],
         'validators': ['Big vali.', 'Small vali.', 'Small vali 2.'],
+        'base_validator': 'Big vali.',
         'reset_bonds': False,
     },
     {
@@ -456,26 +465,29 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 10'],
         'validators': ['Big delayed vali.', 'Small eager vali.', 'Small lazy vali.'],
+        'base_validator': 'Small eager vali.',
         'reset_bonds': False,
     },
     {
-        'name': 'Case 11 - clipping bug',
+        'name': 'Case 11 - clipping demo',
         'num_epochs': 40,
         'weights_epochs': weights_epochs_case_11,
         'stakes_epochs': [stakes_epochs_case_3] * 40,
         'analysis': analysis_dict['case_11'],
-        'validators': ['Big vali. 1', 'Big vali. 2', 'Small vali.'],
+        'validators': ['Big vali. 1 (0.49)', 'Big vali. 2 (0.49)', 'Small vali. (0.02)'],
+        'base_validator': 'Big vali. 1 (0.49)',
         'reset_bonds': True,
         'reset_bonds_index': 1,
         'reset_bonds_epoch': 20
     },
     {
-        'name': 'Case 12 - all validators switch, but small validators support alt miner with minimal weight',
+        'name': 'Case 12 - all validators switch, but small validator/s support alt miner with minimal weight',
         'num_epochs': 40,
         'weights_epochs': weights_epochs_case_12,
         'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 12'],
         'validators': ['Big vali.', 'Small dishonest vali.', 'Small vali.'],
+        'base_validator': 'Big vali.',
         'reset_bonds': True,
         'reset_bonds_index': 1,
         'reset_bonds_epoch': 20
@@ -487,6 +499,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 13'],
         'validators': ['Big vali.', 'Small vali.', 'Small vali 2.'],
+        'base_validator': 'Big vali.',
         'reset_bonds': True,
         'reset_bonds_index': 0,
         'reset_bonds_epoch': 20
@@ -498,6 +511,7 @@ cases = [
         'stakes_epochs': [stakes_epochs_case_1] * 40,
         'analysis': analysis_dict['Case 14'],
         'validators': ['Big vali.', 'Small vali.', 'Small lazy vali.'],
+        'base_validator': 'Small vali.',
         'reset_bonds': False,
     }
 ]
