@@ -9,7 +9,7 @@ import torch
 import base64
 import io
 from IPython.display import Markdown, display, HTML
-from cases import cases
+from cases import cases, BaseCase
 
 
 def YumaRust(
@@ -653,9 +653,9 @@ def Yuma4(
     kappa: float = 0.5,
     bond_alpha: float = 0.025,
     liquid_alpha: bool = False,
-    alpha_high: float = 0.9,
+    alpha_high: float = 0.99,
     decay_rate: float = 0.1,
-    alpha_low: float = 0.7,
+    alpha_low: float = 0.9,
     precision: int = 100_000,
     override_consensus_high: Optional[float] = None,
     override_consensus_low: Optional[float] = None
@@ -863,35 +863,30 @@ def plot_to_base64():
     # Use max-width instead of fixed width for responsiveness
     return f'<img src="data:image/png;base64,{encoded_image}" style="max-width:1200px; height:auto;">'
 
-def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, servers, bond_penalty=1.0):
+def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, servers, bond_penalty=1.0, draggable_table=False):
     """
     Generates an HTML table with embedded charts for all cases, Yuma versions, and all chart types.
     Applies alternating background colors for groups of three charts.
     """
     # Initialize the table structure
-    table_data = {}
-    for _, yuma_version in yuma_versions:
-        table_data[yuma_version] = []
+    table_data = {yuma_version: [] for _, yuma_version in yuma_versions}
 
-    def process_chart(chart_type, case_name, analysis, table_data, chart_base64_dict):
+
+    def process_chart(table_data, chart_base64_dict):
         for yuma_version, chart_base64 in chart_base64_dict.items():
             content = f"{chart_base64}"
             table_data[yuma_version].append(content)
 
     for idx, case in enumerate(cases):
-        case_name = case['name']
-        num_epochs = case['num_epochs']
-        weights_epochs = case['weights_epochs']
-        stakes = case['stakes_epochs']
-        validators = case['validators']
-        analysis = case['analysis']
-        reset_bonds = case['reset_bonds']
-        base_validator = case['base_validator']
+        case_name = case.name
+        num_epochs = case.num_epochs
+        weights_epochs = case.weights_epochs
+        stakes = case.stakes_epochs
+        validators = case.validators
+        base_validator = case.base_validator
+        reset_bonds = case.reset_bonds
 
-        if idx in [9, 10]:
-            chart_types = ['weights', 'dividends', 'bonds', 'incentives']
-        else:
-            chart_types = ['weights', 'dividends', 'bonds']
+        chart_types = ['weights', 'dividends', 'bonds', 'incentives'] if idx in [9, 10] else ['weights', 'dividends', 'bonds']
 
         for chart_type in chart_types:
             chart_base64_dict = {}
@@ -907,8 +902,8 @@ def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, 
                 reset_bonds_epoch = None
                 reset_bonds_miner_index = None
                 if yuma_function in [Yuma31, Yuma32, Yuma4] and reset_bonds:
-                    reset_bonds_epoch = case['reset_bonds_epoch']
-                    reset_bonds_miner_index = case['reset_bonds_index']
+                    reset_bonds_epoch = case.reset_bonds_epoch
+                    reset_bonds_miner_index = case.reset_bonds_index
 
                 # Run simulation to get dividends and bonds
                 dividends_per_validator, bonds_per_epoch, server_incentives_per_epoch = run_simulation(
@@ -965,81 +960,16 @@ def generate_chart_table(cases, yuma_versions, total_emission, total_stake_tao, 
                 chart_base64_dict[yuma_version] = chart_base64
 
             # Process the chart data for all yuma_versions
-            process_chart(chart_type, case_name, analysis, table_data, chart_base64_dict)
+            process_chart(table_data, chart_base64_dict)
 
+ 
     # Convert the table to a DataFrame
     summary_table = pd.DataFrame(table_data)
 
-    # Create CSS for alternating group backgrounds
-    custom_css = """
-    <style>
-        .scrollable-table-container {
-            width: 100%; 
-            overflow-x: auto;
-            overflow-y: hidden;
-            white-space: nowrap;
-            border: 1px solid #ccc;  
-            background-color: hsl(0, 0%, 98%) !important;
-        }
-        table {
-            border-collapse: collapse;
-            table-layout: auto;
-            width: auto;
-            background-color: hsl(0, 0%, 100%) !important;
-        }
-        td, th {
-            padding: 10px;
-            vertical-align: top;
-            text-align: center;
-            color: hsl(0, 0%, 20%) !important;
-        }
-        tr.group-light td {
-            background-color: hsl(0, 0%, 100%) !important;  /* White for light groups */
-        }
-        tr.group-gray td {
-            background-color: hsl(0, 0%, 95%) !important;  /* Light gray for gray groups */
-        }
-    </style>
-    """
-
-    # Generate the table rows
-    html_rows = []
-    group_counter = 0
-    num_rows = len(next(iter(table_data.values())))  # Number of rows based on one of the columns
-    for i in range(num_rows):
-        # Determine the group (light or gray)
-        group_class = "group-light" if (group_counter // 3) % 2 == 0 else "group-gray"
-
-        # Build the row HTML
-        row_html = f'<tr class="{group_class}">'
-        for yuma_version in summary_table.columns:
-            cell_content = summary_table[yuma_version][i]
-            row_html += f'<td>{cell_content}</td>'
-        row_html += '</tr>'
-        html_rows.append(row_html)
-
-        # Increment group counter
-        group_counter += 1
-
-    # Combine rows and create the final table
-    html_table = f"""
-    <table>
-        <thead>
-            <tr>{''.join(f'<th>{col}</th>' for col in summary_table.columns)}</tr>
-        </thead>
-        <tbody>
-            {''.join(html_rows)}
-        </tbody>
-    </table>
-    """
-
-    scrollable_table = f"""
-    <div class="scrollable-table-container">
-        {html_table}
-    </div>
-    """
-
-    full_html = custom_css + scrollable_table
+    if draggable_table:
+        full_html = generate_draggable_html_table(table_data, summary_table)
+    else:
+        full_html = generate_ipynb_table(table_data, summary_table)
 
     return HTML(full_html)
 
@@ -1348,7 +1278,7 @@ def calculate_total_dividends(
     validators: List[str],
     dividends_per_validator: Dict[str, List[float]],
     base_validator: str,
-    num_epochs: int = 30
+    num_epochs: int,
 ) -> Tuple[Dict[str, float], Dict[str, float]]:
     """
     Calculates the total dividends per validator and computes the percentage difference
@@ -1360,12 +1290,16 @@ def calculate_total_dividends(
     """
     total_dividends = {}
     for validator in validators:
-        dividends = dividends_per_validator[validator][:num_epochs]
+        dividends = dividends_per_validator.get(validator, [])
+        dividends = dividends[:num_epochs]
         total_dividend = sum(dividends)
         total_dividends[validator] = total_dividend
 
     # Get base dividend
-    base_dividend = total_dividends[base_validator]
+    base_dividend = total_dividends.get(base_validator, None)
+    if base_dividend is None or base_dividend == 0.0:
+        print(f"Warning: Base validator '{base_validator}' has zero or missing total dividends.")
+        base_dividend = 1e-6  # Assign a small epsilon value to avoid division by zero
 
     # Compute percentage difference vs base for each validator
     percentage_diff_vs_base = {}
@@ -1378,27 +1312,278 @@ def calculate_total_dividends(
 
     return total_dividends, percentage_diff_vs_base
 
+import pandas as pd
+from typing import Callable, Dict, List, Tuple
+from IPython.display import HTML
+import logging
 
+# Ensure logging is configured to display information
+logging.basicConfig(level=logging.INFO)
 
-# servers = ['Server 1', 'Server 2']
+import pandas as pd
+from typing import Callable, Dict, List, Tuple
+import logging
 
-# total_emission = 100 # We assume this is the total emission in tao per epoch for the subnet
-# total_stake_tao = 1_000_000  # Total stake in the network
+def generate_total_dividends_table(
+    cases: List[BaseCase],
+    yuma_versions: List[Tuple[Callable, str]],
+    total_emission: float,
+    total_stake_tao: float,
+    bond_penalty: float,
+    servers: List[str],
+) -> pd.DataFrame:
+    """
+    Generates a DataFrame with total dividends per standardized validator (A, B, C) 
+    for each Yuma version and case.
 
-# case_name = cases[1]['name']
-# num_epochs = cases[1]['num_epochs']
-# weights_epochs = cases[1]['weights_epochs']
-# stakes = cases[1]['stakes_epochs']
-# validators = cases[1]['validators']
-# reset_bonds = cases[1]['reset_bonds']
+    Args:
+        cases (List[Dict]): List of cases to simulate.
+        yuma_versions (List[Tuple[Callable, str]]): List of Yuma functions and their corresponding names.
+        total_emission (float): Total emission value for simulation.
+        total_stake_tao (float): Total stake Tao for simulation.
+        bond_penalty (float): Bond penalty parameter.
+        servers (List[str]): List of server names.
 
-# dividends_per_validator, bonds_per_epoch = run_simulation(
-#     validators=validators,
-#     stakes=stakes,
-#     weights=weights_epochs,
-#     num_epochs=num_epochs,
-#     total_emission=total_emission,
-#     total_stake_tao=total_stake_tao,
-#     yuma_function=Yuma,
-#     liquid_alpha=True,
-# )
+    Returns:
+        pd.DataFrame: DataFrame where columns are 'Validator A - Yuma X', 
+                      'Validator B - Yuma X', 'Validator C - Yuma X', etc., 
+                      and rows represent each case.
+    """
+    standardized_validators = ['Validator A', 'Validator B', 'Validator C']
+    rows = []
+
+    for case in cases:
+        case_name = case.name
+        original_validators = case.validators
+        stakes_epochs = case.stakes_epochs
+        weights_epochs = case.weights_epochs
+        num_epochs = case.num_epochs
+        base_validator_original = case.base_validator
+        reset_bonds = case.reset_bonds
+        reset_bonds_epoch = case.reset_bonds_epoch
+        reset_bonds_index = case.reset_bonds_index
+        kappa = getattr(case, 'kappa', 0.5)
+
+        # Ensure exactly three validators
+        if len(original_validators) != 3:
+            raise ValueError(f"Case '{case_name}' does not have exactly 3 validators.")
+
+        # Map original validators to standardized names based on position
+        validator_mapping = {
+            original_validators[0]: 'Validator A',
+            original_validators[1]: 'Validator B',
+            original_validators[2]: 'Validator C',
+        }
+
+        # Determine standardized base validator
+        base_validator_standardized = validator_mapping.get(base_validator_original, base_validator_original)
+
+        # Initialize a row with 'Case'
+        row = {'Case': case_name}
+
+        for yuma_function, yuma_version in yuma_versions:
+            # Determine if liquid_alpha is enabled based on Yuma version name
+            liquid_alpha = yuma_version.endswith("liquid alpha on")
+
+            # Handle bond resetting for specific Yuma functions
+            current_reset_bonds_epoch = reset_bonds_epoch
+            current_reset_bonds_index = reset_bonds_index
+            if not (yuma_function in [Yuma31, Yuma32, Yuma4] and reset_bonds):
+                current_reset_bonds_epoch = None
+                current_reset_bonds_index = None
+
+            # Run simulation
+            dividends_per_validator, _, _ = run_simulation(
+                validators=original_validators,
+                stakes=stakes_epochs,
+                weights=weights_epochs,
+                num_epochs=num_epochs,
+                total_emission=total_emission,
+                total_stake_tao=total_stake_tao,
+                yuma_function=yuma_function,
+                bond_penalty=bond_penalty,
+                liquid_alpha=liquid_alpha,
+                reset_bonds_epoch=current_reset_bonds_epoch,
+                reset_bonds_miner_index=current_reset_bonds_index,
+                kappa=kappa,
+            )
+
+            # Calculate total dividends
+            total_dividends, _ = calculate_total_dividends(
+                validators=original_validators,
+                dividends_per_validator=dividends_per_validator,
+                base_validator=base_validator_original,
+                num_epochs=num_epochs
+            )
+
+            # Map dividends to standardized validator names
+            standardized_dividends = {
+                validator_mapping[orig_val]: total_dividends.get(orig_val, 0.0)
+                for orig_val in original_validators
+            }
+
+            # Populate row with dividends for each Yuma version and validator
+            for std_validator in standardized_validators:
+                dividend = standardized_dividends.get(std_validator, 0.0)
+                column_name = f"{std_validator} - {yuma_version}"
+                row[column_name] = dividend
+
+        # Append the populated row for the current case
+        rows.append(row)
+
+    # Create DataFrame from all rows
+    df = pd.DataFrame(rows)
+
+    # Optional: Reorder columns to have 'Case' first and then Yuma versions in the provided order
+    columns = ['Case']
+    for yuma_version in [yv for _, yv in yuma_versions]:
+        for std_validator in standardized_validators:
+            col_name = f"{std_validator} - {yuma_version}"
+            if col_name in df.columns:
+                columns.append(col_name)
+    df = df[columns]
+
+    return df
+
+def generate_draggable_html_table(table_data, summary_table):
+    custom_css_js = """
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        .scrollable-table-container {
+            width: 100%; 
+            height: 100vh; /* Full screen height */
+            overflow: hidden; /* No traditional scrollbars */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #ccc;
+            position: relative; 
+            cursor: grab;
+        }
+        .scrollable-table-container:active {
+            cursor: grabbing;
+        }
+        table {
+            border-collapse: collapse;
+            margin: 0 auto;
+            width: auto;
+        }
+        td, th {
+            padding: 10px;
+            vertical-align: top;
+            text-align: center;
+        }
+    </style>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            const container = document.querySelector('.scrollable-table-container');
+            let isDown = false;
+            let startX, startY, scrollLeft, scrollTop;
+
+            container.addEventListener('mousedown', (e) => {
+                isDown = true;
+                startX = e.pageX - container.offsetLeft;
+                startY = e.pageY - container.offsetTop;
+                scrollLeft = container.scrollLeft;
+                scrollTop = container.scrollTop;
+            });
+
+            container.addEventListener('mouseleave', () => {
+                isDown = false;
+            });
+
+            container.addEventListener('mouseup', () => {
+                isDown = false;
+            });
+
+            container.addEventListener('mousemove', (e) => {
+                if (!isDown) return;
+                e.preventDefault();
+                const x = e.pageX - container.offsetLeft;
+                const y = e.pageY - container.offsetTop;
+                const walkX = (x - startX) * 1; 
+                const walkY = (y - startY) * 1; 
+                container.scrollLeft = scrollLeft - walkX;
+                container.scrollTop = scrollTop - walkY;
+            });
+        });
+    </script>
+    """
+    
+    # Generate HTML rows
+    html_rows = []
+    for i in range(len(next(iter(table_data.values())))):  # Number of rows
+        row_html = '<tr>'
+        for yuma_version in summary_table.columns:
+            cell_content = summary_table[yuma_version][i]
+            row_html += f'<td>{cell_content}</td>'
+        row_html += '</tr>'
+        html_rows.append(row_html)
+
+    # Combine rows and create the final table
+    html_table = f"""
+    <div class="scrollable-table-container">
+        <table>
+            <thead>
+                <tr>{''.join(f'<th>{col}</th>' for col in summary_table.columns)}</tr>
+            </thead>
+            <tbody>
+                {''.join(html_rows)}
+            </tbody>
+        </table>
+    </div>
+    """
+    return custom_css_js + html_table
+
+def generate_ipynb_table(table_data, summary_table):
+    custom_css = """
+    <style>
+        .scrollable-table-container {
+            width: 100%; 
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+            border: 1px solid #ccc;  
+            background-color: hsl(0, 0%, 98%);
+        }
+        table {
+            border-collapse: collapse;
+            table-layout: auto;
+            width: auto;
+        }
+        td, th {
+            padding: 10px;
+            vertical-align: top;
+            text-align: center;
+        }
+    </style>
+    """
+
+    # Generate HTML rows
+    html_rows = []
+    for i in range(len(next(iter(table_data.values())))):  # Number of rows
+        row_html = '<tr>'
+        for yuma_version in summary_table.columns:
+            cell_content = summary_table[yuma_version][i]
+            row_html += f'<td>{cell_content}</td>'
+        row_html += '</tr>'
+        html_rows.append(row_html)
+
+    # Combine rows and create the final table
+    html_table = f"""
+    <div class="scrollable-table-container">
+        <table>
+            <thead>
+                <tr>{''.join(f'<th>{col}</th>' for col in summary_table.columns)}</tr>
+            </thead>
+            <tbody>
+                {''.join(html_rows)}
+            </tbody>
+        </table>
+    </div>
+    """
+    return custom_css + html_table
