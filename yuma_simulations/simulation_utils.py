@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-import matplotlib as mpl
 import numpy as np
 import pandas as pd
 import torch
@@ -19,8 +18,6 @@ from yumas import (
     YumaParams,
     SimulationHyperparameters,
 )
-
-mpl.rcParams['figure.dpi'] = 50
 
 def run_simulation(
     case: BaseCase,
@@ -670,7 +667,7 @@ def plot_to_base64():
     Captures the current Matplotlib figure and encodes it as a Base64 string.
     """
     buf = io.BytesIO()
-    plt.savefig(buf, format='png', transparent=True, bbox_inches='tight', dpi=150)  # Use a higher DPI for sharper images
+    plt.savefig(buf, format='png', transparent=True, bbox_inches='tight', dpi=80)
     buf.seek(0)
     encoded_image = base64.b64encode(buf.read()).decode('ascii')
     buf.close()
