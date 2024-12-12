@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import numpy as np
 import pandas as pd
 import torch
@@ -18,6 +19,8 @@ from yumas import (
     YumaParams,
     SimulationHyperparameters,
 )
+
+mpl.rcParams['figure.dpi'] = 50
 
 def run_simulation(
     case: BaseCase,
