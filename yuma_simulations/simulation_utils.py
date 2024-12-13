@@ -4,6 +4,7 @@ import pandas as pd
 import torch
 import base64
 import io
+import functools
 from IPython.display import HTML
 from typing import Dict, List, Optional, Tuple
 from cases import cases, BaseCase
@@ -353,16 +354,7 @@ def plot_results(
     num_epochs_calculated = None
     x = None
 
-    combined_styles = [
-        ('-', '+', 12, 2),
-        ('--', 'x', 12, 1),
-        (':', 'o', 4, 1)
-    ]
-
-    validator_styles = {
-        validator: combined_styles[idx % len(combined_styles)]
-        for idx, validator in enumerate(validators)
-    }
+    validator_styles = get_validator_styles(validators)
 
     total_dividends, percentage_diff_vs_base = calculate_total_dividends(
         validators,
@@ -412,11 +404,8 @@ def plot_results(
             linestyle=linestyle
         )
 
-    tick_locs = [0, 1, 2] + list(range(5, num_epochs_calculated, 5))  # Every 5th epoch
-    tick_labels = [str(i) for i in tick_locs]
+    set_default_xticks(ax_main, num_epochs_calculated)
 
-    ax_main.set_xticks(tick_locs)
-    ax_main.set_xticklabels(tick_labels, fontsize=8)
     ax_main.set_xlabel('Time (Epochs)')
     ax_main.set_ylim(bottom=0)
     ax_main.set_ylabel('Dividend per 1,000 Tao per Epoch')
@@ -443,63 +432,22 @@ def plot_bonds(
     to_base64: bool = False,
     normalize: bool = False
 ):
-    """
-    Plots bonds per server over epochs for each validator.
-    If `normalize=True`, each epoch for a given server is normalized so that
-    the sum of bonds across validators equals 1.
-    """
     x = list(range(num_epochs))
 
     fig, axes = plt.subplots(1, len(servers), figsize=(14, 5), sharex=True, sharey=True)
     if len(servers) == 1:
-        axes = [axes]  # Ensure axes is always a list
-    if normalize:
-        fig.suptitle(f'Validators bonds per Server normalized\n{case_name}', fontsize=14)
-    else:
-        fig.suptitle(f'Validators bonds per Server\n{case_name}', fontsize=14)
+        axes = [axes]
 
-    combined_styles = [
-        ('-', '+', 12, 2),   # (linestyle, marker, markersize, markeredgewidth)
-        ('--', 'x', 12, 1),
-        (':', 'o', 4, 1)
-    ]
+    bonds_data = prepare_bond_data(bonds_per_epoch, validators, servers, normalize=normalize)
+    validator_styles = get_validator_styles(validators)
 
-    validator_styles = {
-        validator: combined_styles[idx % len(combined_styles)]
-        for idx, validator in enumerate(validators)
-    }
-
-    # Step 1: Extract bonds data
-    bonds_data = []
-    for idx_s, _ in enumerate(servers):
-        server_bonds = []
-        for idx_v, _ in enumerate(validators):
-            validator_bonds = []
-            for epoch in range(num_epochs):
-                B = bonds_per_epoch[epoch]
-                bond_value = B[idx_v, idx_s].item()
-                validator_bonds.append(bond_value)
-            server_bonds.append(validator_bonds)
-        bonds_data.append(server_bonds)
-
-    # Step 2: Normalize if requested
-    if normalize:
-        for idx_s in range(len(servers)):
-            for epoch in range(num_epochs):
-                epoch_bonds = [bonds_data[idx_s][idx_v][epoch] for idx_v in range(len(validators))]
-                total = sum(epoch_bonds)
-                if total > 1e-12:
-                    for idx_v in range(len(validators)):
-                        bonds_data[idx_s][idx_v][epoch] /= total
-
-    # Step 3: Plot the data
     handles, labels = [], []
     for idx_s, server in enumerate(servers):
         ax = axes[idx_s]
         for idx_v, validator in enumerate(validators):
             bonds = bonds_data[idx_s][idx_v]
-
             linestyle, marker, markersize, markeredgewidth = validator_styles[validator]
+
             line, = ax.plot(
                 x, bonds,
                 alpha=0.7,
@@ -509,22 +457,26 @@ def plot_bonds(
                 linestyle=linestyle,
                 linewidth=2
             )
-
             if idx_s == 0:
                 handles.append(line)
                 labels.append(validator)
 
+        set_default_xticks(ax, num_epochs)
+
+        ylabel = 'Bond Ratio' if normalize else 'Bond Value'
         ax.set_xlabel('Epoch')
-        if normalize:
-            ax.set_ylabel('Bond Ratio' if idx_s == 0 else '')
-        else:
-            ax.set_ylabel('Bond Value' if idx_s == 0 else '')
+        if idx_s == 0:
+            ax.set_ylabel(ylabel)
         ax.set_title(server)
         ax.grid(True)
 
         if normalize:
             ax.set_ylim(0, 1.05)
 
+    fig.suptitle(
+        f"Validators bonds per Server{' normalized' if normalize else ''}\n{case_name}", 
+        fontsize=14
+    )
     fig.legend(handles, labels, loc='lower center', ncol=len(validators), bbox_to_anchor=(0.5, 0.02))
     plt.tight_layout(rect=[0, 0.05, 0.98, 0.95])
 
@@ -541,97 +493,72 @@ def plot_validator_server_weights(
     case_name: str,
     to_base64: bool = False,
 ):
+    validator_styles = get_validator_styles(validators)
 
-    marker_styles = ['+', 'x', '*']
-    line_styles = ['-', '--', ':']
-    marker_sizes = [14, 10, 8]
-
-    # Collect all y-values from weights_epochs
     y_values_all = [
         weights_epochs[epoch][idx_v][1].item()
         for idx_v in range(len(validators))
         for epoch in range(num_epochs)
     ]
     unique_y_values = sorted(set(y_values_all))
-
-    # Define thresholds
     min_label_distance = 0.05
     close_to_server_threshold = 0.02
 
-    # Function to determine if a value is a round number (e.g., multiples of 0.05)
     def is_round_number(y):
-        return abs((y * 20) - round(y * 20)) < 1e-6  # Checks if value is a multiple of 0.05
+        return abs((y * 20) - round(y * 20)) < 1e-6  # Check if value is a multiple of 0.05
 
-    # Initialize y-ticks with server labels
     y_tick_positions = [0.0, 1.0]
     y_tick_labels = [servers[0], servers[1]]
 
-    # Process other y-values
     for y in unique_y_values:
         if y in [0.0, 1.0]:
-            continue  # Already added servers
+            continue
         if abs(y - 0.0) < close_to_server_threshold or abs(y - 1.0) < close_to_server_threshold:
-            continue  # Skip y-values too close to server labels
-        # Check if y is a round number
+            continue
         if is_round_number(y):
-            # Check distance to existing y-ticks
             if all(abs(y - existing_y) >= min_label_distance for existing_y in y_tick_positions):
                 y_tick_positions.append(y)
-                # Format label as integer percentage if no decimal part, else one decimal
                 y_percentage = y * 100
-                label = f'{y_percentage:.0f}%'
+                label = f'{y_percentage:.0f}%' if y_percentage.is_integer() else f'{y_percentage:.1f}%'
                 y_tick_labels.append(label)
         else:
-            # For non-round numbers, only add if not too close
             if all(abs(y - existing_y) >= min_label_distance for existing_y in y_tick_positions):
                 y_tick_positions.append(y)
-                # Format label as percentage with one decimal place
                 y_percentage = y * 100
-                label = f'{y_percentage:.0f}%'
+                label = f'{y_percentage:.0f}%' if y_percentage.is_integer() else f'{y_percentage:.1f}%'
                 y_tick_labels.append(label)
 
-    # Sort y-ticks and labels together
-    ticks = list(zip(y_tick_positions, y_tick_labels))
-    ticks.sort()
+    ticks = sorted(zip(y_tick_positions, y_tick_labels))
     y_tick_positions, y_tick_labels = zip(*ticks)
-    y_tick_positions = list(y_tick_positions)
-    y_tick_labels = list(y_tick_labels)
 
-    # Determine figure height based on the number of y-ticks
     fig_height = 1 if len(y_tick_positions) <= 2 else 3
-    plt.figure(figsize=(14, fig_height))
+    fig, ax = plt.subplots(figsize=(14, fig_height))
+    ax.set_ylim(-0.05, 1.05)
 
-    # Set y-limits
-    plt.ylim(-0.05, 1.05)
-
-    # Plot the data
     for idx_v, validator in enumerate(validators):
-        y_values = [
-            weights_epochs[epoch][idx_v][1].item() for epoch in range(num_epochs)
-        ]
-        plt.plot(
+        y_values = [weights_epochs[epoch][idx_v][1].item() for epoch in range(num_epochs)]
+        linestyle, marker, markersize, markeredgewidth = validator_styles[validator]
+
+        ax.plot(
             range(num_epochs),
             y_values,
             label=validator,
-            marker=marker_styles[idx_v % len(marker_styles)],
-            linestyle=line_styles[idx_v % len(line_styles)],
-            markersize=marker_sizes[idx_v % len(marker_sizes)],
+            marker=marker,
+            linestyle=linestyle,
+            markersize=markersize,
+            markeredgewidth=markeredgewidth,
             linewidth=2
         )
 
-    plt.xlabel('Epoch')
-    plt.title(f'Validators Weights to Servers \n{case_name}')
+    ax.set_yticks(y_tick_positions)
+    ax.set_yticklabels(y_tick_labels)
 
-    # Set y-ticks and labels
-    plt.yticks(y_tick_positions, y_tick_labels)
-    plt.legend()
-    plt.grid(True)
+    set_default_xticks(ax, num_epochs)
 
-    # Set x-axis ticks
-    tick_locs = list(range(0, num_epochs, 5))
-    if 0 not in tick_locs:
-        tick_locs.insert(0, 0)
-    plt.xticks(tick_locs, [str(i) for i in tick_locs])
+    ax.set_xlabel('Epoch')
+    ax.set_title(f'Validators Weights to Servers \n{case_name}')
+    ax.legend()
+    ax.grid(True)
 
     if to_base64:
         return plot_to_base64()
@@ -645,18 +572,20 @@ def plot_incentives(
     to_base64: bool = False
 ):
     x = np.arange(num_epochs)
-    plt.figure(figsize=(14, 3))
+    _, ax = plt.subplots(figsize=(14, 3))
 
     for idx_s, server in enumerate(servers):
         incentives = [server_incentives[idx_s].item() for server_incentives in server_incentives_per_epoch]
-        plt.plot(x, incentives, label=server)
+        ax.plot(x, incentives, label=server)
 
-    plt.xlabel('Epoch')
-    plt.ylabel('Server Incentive')
-    plt.title(f'Server Incentives\n{case_name}')
-    plt.ylim(-0.05, 1.05)
-    plt.legend()
-    plt.grid(True)
+    set_default_xticks(ax, num_epochs)
+
+    ax.set_xlabel('Epoch')
+    ax.set_ylabel('Server Incentive')
+    ax.set_title(f'Server Incentives\n{case_name}')
+    ax.set_ylim(-0.05, 1.05)
+    ax.legend()
+    ax.grid(True)
 
     if to_base64:
         return plot_to_base64()
@@ -839,3 +768,55 @@ def generate_ipynb_table(table_data, summary_table):
     </div>
     """
     return custom_css + html_table
+
+def prepare_bond_data(bonds_per_epoch, validators, servers, normalize: bool):
+    num_epochs = len(bonds_per_epoch)
+    bonds_data = []
+    for idx_s, _ in enumerate(servers):
+        server_bonds = []
+        for idx_v, _ in enumerate(validators):
+            validator_bonds = [bonds_per_epoch[epoch][idx_v, idx_s].item() for epoch in range(num_epochs)]
+            server_bonds.append(validator_bonds)
+        bonds_data.append(server_bonds)
+
+    if normalize:
+        for idx_s in range(len(servers)):
+            for epoch in range(num_epochs):
+                epoch_bonds = [bonds_data[idx_s][idx_v][epoch] for idx_v in range(len(validators))]
+                total = sum(epoch_bonds)
+                if total > 1e-12:
+                    for idx_v in range(len(validators)):
+                        bonds_data[idx_s][idx_v][epoch] /= total
+
+    return bonds_data
+
+def plot_to_base64():
+    """
+    Captures the current Matplotlib figure and encodes it as a Base64 string.
+    """
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', transparent=True, bbox_inches='tight', dpi=100)  # Use a higher DPI for sharper images
+    buf.seek(0)
+    encoded_image = base64.b64encode(buf.read()).decode('ascii')
+    buf.close()
+    plt.close()
+    # Use max-width instead of fixed width for responsiveness
+    return f'<img src="data:image/png;base64,{encoded_image}" style="max-width:1200px; height:auto;">'
+
+def get_validator_styles(validators):
+    combined_styles = [
+        ('-', '+', 12, 2),
+        ('--', 'x', 12, 1),
+        (':', 'o', 4, 1)
+    ]
+    return {
+        validator: combined_styles[idx % len(combined_styles)]
+        for idx, validator in enumerate(validators)
+    }
+
+def set_default_xticks(ax, num_epochs: int):
+    tick_locs = [0, 1, 2] + list(range(5, num_epochs, 5))
+    tick_labels = [str(i) for i in tick_locs]
+    ax.set_xticks(tick_locs)
+    ax.set_xticklabels(tick_labels, fontsize=8)
+
