@@ -5,11 +5,14 @@ from typing import List
 # Registry to store case classes
 class_registry = {}
 
+
 def register_case(name: str):
     def decorator(cls):
         class_registry[name] = cls
         return cls
+
     return decorator
+
 
 @dataclass
 class BaseCase:
@@ -24,7 +27,9 @@ class BaseCase:
 
     @property
     def weights_epochs(self) -> List[torch.Tensor]:
-        raise NotImplementedError("Subclasses must implement the weights_epochs property.")
+        raise NotImplementedError(
+            "Subclasses must implement the weights_epochs property."
+        )
 
     @property
     def stakes_epochs(self) -> List[torch.Tensor]:
@@ -32,7 +37,9 @@ class BaseCase:
 
     def __post_init__(self):
         if self.base_validator not in self.validators:
-            raise ValueError(f"base_validator '{self.base_validator}' must be in validators list.")
+            raise ValueError(
+                f"base_validator '{self.base_validator}' must be in validators list."
+            )
 
 
 def create_case(case_name: str, **kwargs) -> BaseCase:
@@ -41,11 +48,18 @@ def create_case(case_name: str, **kwargs) -> BaseCase:
     case_class = class_registry[case_name]
     return case_class(**kwargs)
 
-@register_case('Case 1')
+
+@register_case("Case 1")
 @dataclass
 class Case1(BaseCase):
     name: str = "Case 1 - kappa moves first"
-    validators: list[str] = field(default_factory=lambda: ["Big vali. (0.8)", "Small lazy vali. (0.1)", "Small lazier vali. (0.1)"])
+    validators: list[str] = field(
+        default_factory=lambda: [
+            "Big vali. (0.8)",
+            "Small lazy vali. (0.1)",
+            "Small lazier vali. (0.1)",
+        ]
+    )
     base_validator: str = "Big vali. (0.8)"
 
     @property
@@ -70,11 +84,18 @@ class Case1(BaseCase):
             weights_epochs_case_1.append(W)
         return weights_epochs_case_1
 
-@register_case('Case 2')
+
+@register_case("Case 2")
 @dataclass
 class Case2(BaseCase):
     name: str = "Case 2 - kappa moves second"
-    validators: list[str] = field(default_factory=lambda: ["Big vali. (0.8)", "Small eager vali. (0.1)", "Small lazy vali. (0.1)"])
+    validators: list[str] = field(
+        default_factory=lambda: [
+            "Big vali. (0.8)",
+            "Small eager vali. (0.1)",
+            "Small lazy vali. (0.1)",
+        ]
+    )
     base_validator: str = "Small eager vali. (0.1)"
 
     @property
@@ -99,11 +120,18 @@ class Case2(BaseCase):
             weights_epochs_case_2.append(W)
         return weights_epochs_case_2
 
-@register_case('Case 3')
+
+@register_case("Case 3")
 @dataclass
 class Case3(BaseCase):
     name: str = "Case 3 - kappa moves third"
-    validators: list[str] = field(default_factory=lambda: ["Big vali. (0.8)", "Small eager vali. (0.1)", "Small lazy vali. (0.1)"])
+    validators: list[str] = field(
+        default_factory=lambda: [
+            "Big vali. (0.8)",
+            "Small eager vali. (0.1)",
+            "Small lazy vali. (0.1)",
+        ]
+    )
     base_validator: str = "Small eager vali. (0.1)"
 
     @property
@@ -128,11 +156,18 @@ class Case3(BaseCase):
             weights_epochs_case_3.append(W)
         return weights_epochs_case_3
 
-@register_case('Case 4')
+
+@register_case("Case 4")
 @dataclass
 class Case4(BaseCase):
     name: str = "Case 4 - all validators switch"
-    validators: list[str] = field(default_factory=lambda: ["Big vali. (0.8)", "Small vali. (0.1)", "Small vali 2. (0.1)"])
+    validators: list[str] = field(
+        default_factory=lambda: [
+            "Big vali. (0.8)",
+            "Small vali. (0.1)",
+            "Small vali 2. (0.1)",
+        ]
+    )
     base_validator: str = "Big vali. (0.8)"
 
     @property
@@ -153,11 +188,18 @@ class Case4(BaseCase):
             weights_epochs_case_4.append(W)
         return weights_epochs_case_4
 
-@register_case('Case 5')
+
+@register_case("Case 5")
 @dataclass
 class Case5(BaseCase):
     name: str = "Case 5 - kappa moves second, then third"
-    validators: list[str] = field(default_factory=lambda: ["Big vali. (0.8)", "Small eager-eager vali. (0.1)", "Small eager-lazy vali. (0.1)"])
+    validators: list[str] = field(
+        default_factory=lambda: [
+            "Big vali. (0.8)",
+            "Small eager-eager vali. (0.1)",
+            "Small eager-lazy vali. (0.1)",
+        ]
+    )
     base_validator: str = "Small eager-eager vali. (0.1)"
     reset_bonds: bool = True
     reset_bonds_index: int = 1
@@ -196,11 +238,18 @@ class Case5(BaseCase):
             weights_epochs_case_5.append(W)
         return weights_epochs_case_5
 
-@register_case('Case 6')
+
+@register_case("Case 6")
 @dataclass
 class Case6(BaseCase):
     name: str = "Case 6 - kappa moves second, then all validators switch"
-    validators: list[str] = field(default_factory=lambda: ["Big vali. (0.8)", "Small eager vali. (0.1)", "Small lazy vali. (0.1)"])
+    validators: list[str] = field(
+        default_factory=lambda: [
+            "Big vali. (0.8)",
+            "Small eager vali. (0.1)",
+            "Small lazy vali. (0.1)",
+        ]
+    )
     base_validator: str = "Small eager vali. (0.1)"
     reset_bonds: bool = True
     reset_bonds_index: int = 0
@@ -232,11 +281,18 @@ class Case6(BaseCase):
             weights_epochs_case_6.append(W)
         return weights_epochs_case_6
 
-@register_case('Case 7')
+
+@register_case("Case 7")
 @dataclass
 class Case7(BaseCase):
     name: str = "Case 7 - big vali moves late, then all but one small vali moves late"
-    validators: list[str] = field(default_factory=lambda: ["Big vali. (0.8)", "Small eager-lazy vali. (0.1)", "Small eager-eager vali. (0.1)"])
+    validators: list[str] = field(
+        default_factory=lambda: [
+            "Big vali. (0.8)",
+            "Small eager-lazy vali. (0.1)",
+            "Small eager-eager vali. (0.1)",
+        ]
+    )
     base_validator: str = "Small eager-eager vali. (0.1)"
     reset_bonds: bool = True
     reset_bonds_index: int = 0
@@ -271,11 +327,18 @@ class Case7(BaseCase):
             weights_epochs_case_7.append(W)
         return weights_epochs_case_7
 
-@register_case('Case 8')
+
+@register_case("Case 8")
 @dataclass
 class Case8(BaseCase):
     name: str = "Case 8 - big vali moves late, then late"
-    validators: list[str] = field(default_factory=lambda: ["Big dishonest lazy vali. (0.8)", "Small eager-eager vali. (0.1)", "Small eager-eager vali 2. (0.1)"])
+    validators: list[str] = field(
+        default_factory=lambda: [
+            "Big dishonest lazy vali. (0.8)",
+            "Small eager-eager vali. (0.1)",
+            "Small eager-eager vali 2. (0.1)",
+        ]
+    )
     base_validator: str = "Small eager-eager vali. (0.1)"
     reset_bonds: bool = True
     reset_bonds_index: int = 1
@@ -314,11 +377,18 @@ class Case8(BaseCase):
             weights_epochs_case_8.append(W)
         return weights_epochs_case_8
 
-@register_case('Case 9')
+
+@register_case("Case 9")
 @dataclass
 class Case9(BaseCase):
     name: str = "Case 9 - small validators merged in e5"
-    validators: list[str] = field(default_factory=lambda: ["Big vali. (0.8)", "Small vali. (0.1/0.2)", "Small vali 2. (0.1/0.0)"])
+    validators: list[str] = field(
+        default_factory=lambda: [
+            "Big vali. (0.8)",
+            "Small vali. (0.1/0.2)",
+            "Small vali 2. (0.1/0.0)",
+        ]
+    )
     base_validator: str = "Big vali. (0.8)"
 
     @property
@@ -341,11 +411,18 @@ class Case9(BaseCase):
             stakes_epochs_case_9.append(stakes)
         return stakes_epochs_case_9
 
-@register_case('Case 10')
+
+@register_case("Case 10")
 @dataclass
 class Case10(BaseCase):
     name: str = "Case 10 - kappa delayed"
-    validators: list[str] = field(default_factory=lambda: ["Big delayed vali. (0.8)", "Small eager vali. (0.1)", "Small lazy vali. (0.1)"])
+    validators: list[str] = field(
+        default_factory=lambda: [
+            "Big delayed vali. (0.8)",
+            "Small eager vali. (0.1)",
+            "Small lazy vali. (0.1)",
+        ]
+    )
     base_validator: str = "Small eager vali. (0.1)"
 
     @property
@@ -370,11 +447,18 @@ class Case10(BaseCase):
             weights_epochs_case_10.append(W)
         return weights_epochs_case_10
 
-@register_case('Case 11')
+
+@register_case("Case 11")
 @dataclass
 class Case11(BaseCase):
     name: str = "Case 11 - clipping demo"
-    validators: list[str] = field(default_factory=lambda: ["Big vali. 1 (0.49)", "Big vali. 2 (0.49)", "Small vali. (0.02)"])
+    validators: list[str] = field(
+        default_factory=lambda: [
+            "Big vali. 1 (0.49)",
+            "Big vali. 2 (0.49)",
+            "Small vali. (0.02)",
+        ]
+    )
     base_validator: str = "Big vali. 1 (0.49)"
     reset_bonds: bool = True
     reset_bonds_index: int = 1
@@ -396,9 +480,9 @@ class Case11(BaseCase):
                 W[2, 1] = 0.39
             else:
                 # Server 1
-                W[0, 0] = 0.3 
+                W[0, 0] = 0.3
                 W[1, 0] = 0.6
-                W[2, 0] = 0.3 
+                W[2, 0] = 0.3
                 # Server 2
                 W[0, 1] = 0.7
                 W[1, 1] = 0.4
@@ -410,11 +494,18 @@ class Case11(BaseCase):
     def stakes_epochs(self) -> List[torch.Tensor]:
         return [torch.tensor([0.49, 0.49, 0.02])] * self.num_epochs
 
-@register_case('Case 12')
+
+@register_case("Case 12")
 @dataclass
 class Case12(BaseCase):
     name: str = "Case 12 - all validators switch, but small validator/s support alt miner with minimal weight"
-    validators: list[str] = field(default_factory=lambda: ["Big vali. (0.8)", "Small dishonest vali. (0.1)", "Small vali. (0.1)"])
+    validators: list[str] = field(
+        default_factory=lambda: [
+            "Big vali. (0.8)",
+            "Small dishonest vali. (0.1)",
+            "Small vali. (0.1)",
+        ]
+    )
     base_validator: str = "Big vali. (0.8)"
     reset_bonds: bool = True
     reset_bonds_index: int = 1
@@ -428,12 +519,16 @@ class Case12(BaseCase):
             if epoch == 0:
                 # All Validators support server 1
                 W[0, 0] = 1.0
-                W[1, :] = torch.tensor([0.999, 0.001])  # Small dishonest vali. shifts slightly to Server 2
+                W[1, :] = torch.tensor(
+                    [0.999, 0.001]
+                )  # Small dishonest vali. shifts slightly to Server 2
                 W[2, 0] = 1.0
             elif 1 <= epoch <= 20:
                 # All Validators support server 2
                 W[0, 1] = 1.0
-                W[1, :] = torch.tensor([0.001, 0.999])  # Small dishonest vali. shifts back to Server 2
+                W[1, :] = torch.tensor(
+                    [0.001, 0.999]
+                )  # Small dishonest vali. shifts back to Server 2
                 W[2, 1] = 1.0
             else:
                 # All Validators support server 1
@@ -443,11 +538,20 @@ class Case12(BaseCase):
             weights_epochs_case_12.append(W)
         return weights_epochs_case_12
 
+
 @dataclass
-@register_case('Case 13')
+@register_case("Case 13")
 class Case13(BaseCase):
-    name: str = "Case 13 - Big vali supports server 2, small validator/s support server 1"
-    validators: list[str] = field(default_factory=lambda: ["Big vali. (0.8)", "Small vali. (0.1)", "Small vali 2. (0.1)"])
+    name: str = (
+        "Case 13 - Big vali supports server 2, small validator/s support server 1"
+    )
+    validators: list[str] = field(
+        default_factory=lambda: [
+            "Big vali. (0.8)",
+            "Small vali. (0.1)",
+            "Small vali 2. (0.1)",
+        ]
+    )
     base_validator: str = "Big vali. (0.8)"
     reset_bonds: bool = True
     reset_bonds_index: int = 0
@@ -468,12 +572,15 @@ class Case13(BaseCase):
                 W[2, :] = torch.tensor([0.5, 0.5])  # Small vali 2. supports Server 1
             weights_epochs_case_13.append(W)
         return weights_epochs_case_13
-    
+
+
 @dataclass
-@register_case('Case 14')
+@register_case("Case 14")
 class Case14(BaseCase):
     name: str = "Case 14 - All validators support Server 1, one of them switches to Server 2 for one epoch"
-    validators: list[str] = field(default_factory=lambda: ["Vali. 1 (0.33)", "Vali. 2 (0.33)", "Vali. 3 (0.34)"])
+    validators: list[str] = field(
+        default_factory=lambda: ["Vali. 1 (0.33)", "Vali. 2 (0.33)", "Vali. 3 (0.34)"]
+    )
     base_validator: str = "Vali. 1 (0.33)"
     reset_bonds: bool = False
 
@@ -493,10 +600,11 @@ class Case14(BaseCase):
                 W[:, 0] = 1.0  # All validators -> Server 1
             weights_epochs_case_14.append(W)
         return weights_epochs_case_14
-    
+
     @property
     def stakes_epochs(self) -> List[torch.Tensor]:
         return [torch.tensor([0.33, 0.33, 0.34])] * self.num_epochs
+
 
 # Instantiate all cases dynamically
 cases = [cls() for cls in class_registry.values()]

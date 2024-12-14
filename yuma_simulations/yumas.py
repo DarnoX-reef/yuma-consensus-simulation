@@ -1,8 +1,8 @@
-
 import math
 import torch
-from typing import  Dict, Optional, Union
+from typing import Dict, Optional, Union
 from dataclasses import dataclass, field, asdict
+
 
 @dataclass
 class SimulationHyperparameters:
@@ -12,6 +12,7 @@ class SimulationHyperparameters:
     validator_emission_ratio: float = 0.41
     total_subnet_stake: float = 1_000_000.0
     consensus_precision: int = 100_000
+
 
 @dataclass
 class YumaParams:
@@ -24,22 +25,26 @@ class YumaParams:
     override_consensus_high: Optional[float] = None
     override_consensus_low: Optional[float] = None
 
+
 @dataclass
 class YumaConfig:
-    simulation: SimulationHyperparameters = field(default_factory=SimulationHyperparameters)
+    simulation: SimulationHyperparameters = field(
+        default_factory=SimulationHyperparameters
+    )
     yuma_params: YumaParams = field(default_factory=YumaParams)
 
     def __post_init__(self):
         # Flatten fields for direct access
         simulation_dict = asdict(self.simulation)
         yuma_params_dict = asdict(self.yuma_params)
-        
+
         for key, value in simulation_dict.items():
             setattr(self, key, value)
-        
+
         for key, value in yuma_params_dict.items():
             setattr(self, key, value)
-        
+
+
 @dataclass(frozen=True)
 class YumaSimulationNames:
     YUMA_RUST: str = "Yuma 0 (subtensor)"
@@ -52,12 +57,13 @@ class YumaSimulationNames:
     YUMA4: str = "Yuma 4 (Rhef+relative bonds)"
     YUMA4_LIQUID: str = "Yuma 4 (Rhef+relative bonds) - liquid alpha on"
 
+
 def YumaRust(
     W: torch.Tensor,
     S: torch.Tensor,
     B_old: Optional[torch.Tensor] = None,
-    config: YumaConfig = YumaConfig()
-) -> Dict[str, Union[torch.Tensor, float]]:
+    config: YumaConfig = YumaConfig(),
+) -> Dict[str, Union[torch.Tensor|str, float]]:
     """
     Currently implemented Subtensor Yuma function.
     """
@@ -109,16 +115,26 @@ def YumaRust(
     B = B / (B_sum + 1e-6)
     B = torch.nan_to_num(B)
 
-    a = b = None
+    a = b = torch.tensor(float('nan'))
     bond_alpha = config.bond_alpha
     if config.liquid_alpha:
-        consensus_high = config.override_consensus_high if config.override_consensus_high is not None else C.quantile(0.75)
-        consensus_low = config.override_consensus_low if config.override_consensus_low is not None else C.quantile(0.25)
+        consensus_high = (
+            config.override_consensus_high
+            if config.override_consensus_high is not None
+            else C.quantile(0.75)
+        )
+        consensus_low = (
+            config.override_consensus_low
+            if config.override_consensus_low is not None
+            else C.quantile(0.25)
+        )
 
         if consensus_high == consensus_low:
             consensus_high = C.quantile(0.99)
 
-        a = (math.log(1 / config.alpha_high - 1) - math.log(1 / config.alpha_low - 1)) / (consensus_low - consensus_high)
+        a = (
+            math.log(1 / config.alpha_high - 1) - math.log(1 / config.alpha_low - 1)
+        ) / (consensus_low - consensus_high)
         b = math.log(1 / config.alpha_low - 1) + a * consensus_low
         alpha = 1 / (1 + math.e ** (-a * C + b))  # alpha to the old weight
         bond_alpha = 1 - torch.clamp(alpha, config.alpha_low, config.alpha_high)
@@ -152,15 +168,16 @@ def YumaRust(
         "validator_reward_normalized": D_normalized,
         "bond_alpha": bond_alpha,
         "alpha_a": a,
-        "alpha_b": b
+        "alpha_b": b,
     }
+
 
 def Yuma(
     W: torch.Tensor,
     S: torch.Tensor,
     B_old: Optional[torch.Tensor] = None,
-    config: YumaConfig = YumaConfig()
-) -> Dict[str, Union[torch.Tensor, float]]:
+    config: YumaConfig = YumaConfig(),
+) -> Dict[str, Union[torch.Tensor|None, float]]:
     """
     Original Yuma function with bonds and EMA calculation.
     """
@@ -211,16 +228,26 @@ def Yuma(
     B = S.view(-1, 1) * W_b / (S.view(-1, 1) * W_b).sum(dim=0)
     B = B.nan_to_num(0)
 
-    a = b = None
+    a = b = torch.tensor(float('nan'))
     bond_alpha = config.bond_alpha
     if config.liquid_alpha:
-        consensus_high = config.override_consensus_high if config.override_consensus_high is not None else C.quantile(0.75)
-        consensus_low = config.override_consensus_low if config.override_consensus_low is not None else C.quantile(0.25)
+        consensus_high = (
+            config.override_consensus_high
+            if config.override_consensus_high is not None
+            else C.quantile(0.75)
+        )
+        consensus_low = (
+            config.override_consensus_low
+            if config.override_consensus_low is not None
+            else C.quantile(0.25)
+        )
 
         if consensus_high == consensus_low:
             consensus_high = C.quantile(0.99)
 
-        a = (math.log(1 / config.alpha_high - 1) - math.log(1 / config.alpha_low - 1)) / (consensus_low - consensus_high)
+        a = (
+            math.log(1 / config.alpha_high - 1) - math.log(1 / config.alpha_low - 1)
+        ) / (consensus_low - consensus_high)
         b = math.log(1 / config.alpha_low - 1) + a * consensus_low
         alpha = 1 / (1 + math.e ** (-a * C + b))  # alpha to the old weight
         bond_alpha = 1 - torch.clamp(alpha, config.alpha_low, config.alpha_high)
@@ -251,16 +278,17 @@ def Yuma(
         "validator_reward_normalized": D_normalized,
         "bond_alpha": bond_alpha,
         "alpha_a": a,
-        "alpha_b": b
+        "alpha_b": b,
     }
+
 
 def Yuma2(
     W: torch.Tensor,
     W_prev: torch.Tensor,
     S: torch.Tensor,
     B_old: Optional[torch.Tensor] = None,
-    config: YumaConfig = YumaConfig()
-) -> Dict[str, Union[torch.Tensor, float]]:
+    config: YumaConfig = YumaConfig(),
+) -> Dict[str, Union[torch.Tensor|None, float]]:
     """
     Original Yuma function with bonds and EMA calculation.
     """
@@ -314,16 +342,26 @@ def Yuma2(
     B = S.view(-1, 1) * W_b / (S.view(-1, 1) * W_b).sum(dim=0)
     B = B.nan_to_num(0)
 
-    a = b = None
+    a = b = torch.tensor(float('nan'))
     bond_alpha = config.bond_alpha
     if config.liquid_alpha:
-        consensus_high = config.override_consensus_high if config.override_consensus_high is not None else C.quantile(0.75)
-        consensus_low = config.override_consensus_low if config.override_consensus_low is not None else C.quantile(0.25)
+        consensus_high = (
+            config.override_consensus_high
+            if config.override_consensus_high is not None
+            else C.quantile(0.75)
+        )
+        consensus_low = (
+            config.override_consensus_low
+            if config.override_consensus_low is not None
+            else C.quantile(0.25)
+        )
 
         if consensus_high == consensus_low:
             consensus_high = C.quantile(0.99)
 
-        a = (math.log(1 / config.alpha_high - 1) - math.log(1 / config.alpha_low - 1)) / (consensus_low - consensus_high)
+        a = (
+            math.log(1 / config.alpha_high - 1) - math.log(1 / config.alpha_low - 1)
+        ) / (consensus_low - consensus_high)
         b = math.log(1 / config.alpha_low - 1) + a * consensus_low
         alpha = 1 / (1 + math.e ** (-a * C + b))  # alpha to the old weight
         bond_alpha = 1 - torch.clamp(alpha, config.alpha_low, config.alpha_high)
@@ -354,16 +392,17 @@ def Yuma2(
         "validator_reward_normalized": D_normalized,
         "bond_alpha": bond_alpha,
         "alpha_a": a,
-        "alpha_b": b
+        "alpha_b": b,
     }
+
 
 def Yuma3(
     W: torch.Tensor,
     S: torch.Tensor,
     B_old: Optional[torch.Tensor] = None,
     config: YumaConfig = YumaConfig(),
-    maxint: int = 2 ** 64 - 1,
-) -> Dict[str, Union[torch.Tensor, float]]:
+    maxint: int = 2**64 - 1,
+) -> Dict[str, Union[torch.Tensor|None, float]]:
     """
     Original Yuma function with bonds and EMA calculation.
     """
@@ -448,15 +487,16 @@ def Yuma3(
         "validator_trust": T_v,
         "validator_bonds": B,
         "validator_reward": D,
-        "validator_reward_normalized": D_normalized
+        "validator_reward_normalized": D_normalized,
     }
+
 
 def Yuma4(
     W: torch.Tensor,
     S: torch.Tensor,
     B_old: Optional[torch.Tensor] = None,
     config: YumaConfig = YumaConfig(),
-) -> Dict[str, Union[torch.Tensor, float]]:
+) -> Dict[str, Union[torch.Tensor|None, float]]:
     """
     Original Yuma function with bonds and EMA calculation.
     """
@@ -503,16 +543,26 @@ def Yuma4(
     T_v = W_clipped.sum(dim=1) / W.sum(dim=1)
 
     # === Liquid Alpha Adjustment ===
-    a = b = None
+    a = b = torch.tensor(float('nan'))
     bond_alpha = config.bond_alpha
     if config.liquid_alpha:
-        consensus_high = config.override_consensus_high if config.override_consensus_high is not None else C.quantile(0.75)
-        consensus_low = config.override_consensus_low if config.override_consensus_low is not None else C.quantile(0.25)
+        consensus_high = (
+            config.override_consensus_high
+            if config.override_consensus_high is not None
+            else C.quantile(0.75)
+        )
+        consensus_low = (
+            config.override_consensus_low
+            if config.override_consensus_low is not None
+            else C.quantile(0.25)
+        )
 
         if consensus_high == consensus_low:
             consensus_high = C.quantile(0.99)
 
-        a = (math.log(1 / config.alpha_high - 1) - math.log(1 / config.alpha_low - 1)) / (consensus_low - consensus_high)
+        a = (
+            math.log(1 / config.alpha_high - 1) - math.log(1 / config.alpha_low - 1)
+        ) / (consensus_low - consensus_high)
         b = math.log(1 / config.alpha_low - 1) + a * consensus_low
         alpha = 1 / (1 + math.e ** (-a * C + b))  # alpha to the old weight
         bond_alpha = 1 - torch.clamp(alpha, config.alpha_low, config.alpha_high)
@@ -521,12 +571,14 @@ def Yuma4(
     if B_old is None:
         B_old = torch.zeros_like(W)
 
-    B_decayed = B_old *  (1 - bond_alpha)
+    B_decayed = B_old * (1 - bond_alpha)
     remaining_capacity = 1.0 - B_decayed
     remaining_capacity = torch.clamp(remaining_capacity, min=0.0)
 
     # Each validator can increase bonds by at most bond_alpha per epoch towards the cap
-    purchase_increment = bond_alpha * W  # Validators allocate their purchase across miners based on weights
+    purchase_increment = (
+        bond_alpha * W
+    )  # Validators allocate their purchase across miners based on weights
     # Ensure that purchase does not exceed remaining capacity
     purchase = torch.min(purchase_increment, remaining_capacity)
 
@@ -540,7 +592,6 @@ def Yuma4(
     # Normalize dividends
     D_normalized = D / (D.sum() + 1e-6)
 
-
     return {
         "weight": W,
         "stake": S,
@@ -551,5 +602,5 @@ def Yuma4(
         "server_incentive": I,
         "validator_bonds": B,
         "validator_reward": D,
-        "validator_reward_normalized": D_normalized
+        "validator_reward_normalized": D_normalized,
     }

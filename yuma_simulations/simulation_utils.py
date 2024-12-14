@@ -1,14 +1,13 @@
-import matplotlib.pyplot as plt
-import numpy as np
+"""
+This module provides functionalities to run Yuma simulations, generate charts, and produce tables of results.
+It integrates various Yuma versions, handles different chart types, and organizes the outputs into HTML tables.
+"""
+
 import pandas as pd
 import torch
-import base64
-import io
-import functools
 from IPython.display import HTML
-from typing import Dict, List, Optional, Tuple
-from cases import cases, BaseCase
-from yumas import (
+from yuma_simulations.cases import BaseCase
+from yuma_simulations.yumas import (
     YumaRust,
     Yuma,
     Yuma2,
@@ -19,123 +18,170 @@ from yumas import (
     YumaParams,
     SimulationHyperparameters,
 )
+from yuma_simulations.charts_utils import (
+    _plot_validator_server_weights,
+    _plot_dividends,
+    _plot_bonds,
+    _plot_incentives,
+    _calculate_total_dividends,
+)
+
 
 def run_simulation(
     case: BaseCase,
     yuma_version: str,
     yuma_config: YumaConfig,
-) -> Tuple[Dict[str, List[float]], List[torch.Tensor]]:
-    """
-    Runs the simulation over multiple epochs using the specified Yuma function.
-    """
-    dividends_per_validator = {validator: [] for validator in case.validators}
-    bonds_per_epoch = []
-    server_incentives_per_epoch = []
-    B_state: Optional[torch.Tensor] = None
-    W_prev: Optional[torch.Tensor] = None
-    server_consensus_weight: Optional[torch.Tensor] = None
+) -> tuple[dict[str, list[float]], list[torch.Tensor], list[torch.Tensor]]:
+    """Runs the Yuma simulation for a given case and Yuma version, returning dividends, bonds and incentive data."""
+
+    dividends_per_validator: dict[str, list[float]] = {
+        validator: [] for validator in case.validators
+    }
+    bonds_per_epoch: list[torch.Tensor] = []
+    server_incentives_per_epoch: list[torch.Tensor] = []
+    B_state: torch.Tensor | None = None
+    W_prev: torch.Tensor | None = None
+    server_consensus_weight: torch.Tensor | None = None
 
     simulation_names = YumaSimulationNames()
 
-
     for epoch in range(case.num_epochs):
-        W = case.weights_epochs[epoch]
-        S = case.stakes_epochs[epoch]
+        W: torch.Tensor = case.weights_epochs[epoch]
+        S: torch.Tensor = case.stakes_epochs[epoch]
 
-        stakes_tao = S * yuma_config.total_subnet_stake
-        stakes_units = stakes_tao / 1_000
+        stakes_tao: torch.Tensor = S * yuma_config.total_subnet_stake
+        stakes_units: torch.Tensor = stakes_tao / 1000.0
 
         # Call the appropriate Yuma function
         if yuma_version in [simulation_names.YUMA, simulation_names.YUMA_LIQUID]:
             result = Yuma(W=W, S=S, B_old=B_state, config=yuma_config)
-            B_state = result['validator_ema_bond']
+            B_state = result["validator_ema_bond"]
         elif yuma_version == simulation_names.YUMA2:
             result = Yuma2(W=W, W_prev=W_prev, S=S, B_old=B_state, config=yuma_config)
-            B_state = result['validator_ema_bond']
-            W_prev = result['weight']
+            B_state = result["validator_ema_bond"]
+            W_prev = result["weight"]
         elif yuma_version == simulation_names.YUMA3:
             result = Yuma3(W, S, B_old=B_state, config=yuma_config)
-            B_state = result['validator_bonds']
+            B_state = result["validator_bonds"]
         elif yuma_version == simulation_names.YUMA31:
             if B_state is not None and epoch == case.reset_bonds_epoch:
                 B_state[:, case.reset_bonds_index] = 0.0
             result = Yuma3(W, S, B_old=B_state, config=yuma_config)
-            B_state = result['validator_bonds']
+            B_state = result["validator_bonds"]
         elif yuma_version == simulation_names.YUMA32:
-            if B_state is not None and epoch == case.reset_bonds_epoch and server_consensus_weight[case.reset_bonds_index] == 0.0:
+            if (
+                B_state is not None
+                and epoch == case.reset_bonds_epoch
+                and server_consensus_weight is not None
+                and server_consensus_weight[case.reset_bonds_index] == 0.0
+            ):
                 B_state[:, case.reset_bonds_index] = 0.0
             result = Yuma3(W, S, B_old=B_state, config=yuma_config)
-            B_state = result['validator_bonds']
-            server_consensus_weight = result['server_consensus_weight']
+            B_state = result["validator_bonds"]
+            server_consensus_weight = result["server_consensus_weight"]
         elif yuma_version in [simulation_names.YUMA4, simulation_names.YUMA4_LIQUID]:
-            if B_state is not None and epoch == case.reset_bonds_epoch and server_consensus_weight[case.reset_bonds_index] == 0.0:
+            if (
+                B_state is not None
+                and epoch == case.reset_bonds_epoch
+                and server_consensus_weight is not None
+                and server_consensus_weight[case.reset_bonds_index] == 0.0
+            ):
                 B_state[:, case.reset_bonds_index] = 0.0
             result = Yuma4(W, S, B_old=B_state, config=yuma_config)
-            B_state = result['validator_bonds']
-            server_consensus_weight = result['server_consensus_weight']
+            B_state = result["validator_bonds"]
+            server_consensus_weight = result["server_consensus_weight"]
         elif yuma_version == "Yuma 0 (subtensor)":
             result = YumaRust(W, S, B_old=B_state, config=yuma_config)
-            B_state = result['validator_ema_bond']
+            B_state = result["validator_ema_bond"]
         else:
             raise ValueError("Invalid Yuma function.")
 
-        D_normalized = result['validator_reward_normalized']
+        D_normalized: torch.Tensor = result["validator_reward_normalized"]
 
-        E_i = yuma_config.validator_emission_ratio * D_normalized
-        validator_emission = E_i * yuma_config.total_epoch_emission
+        E_i: torch.Tensor = yuma_config.validator_emission_ratio * D_normalized
+        validator_emission: torch.Tensor = E_i * yuma_config.total_epoch_emission
 
         for i, validator in enumerate(case.validators):
-            stake_unit = stakes_units[i].item()
-            validator_emission_i = validator_emission[i].item()
+            stake_unit = float(stakes_units[i].item())
+            validator_emission_i = float(validator_emission[i].item())
             if stake_unit > 1e-6:
                 dividend_per_1000_tao = validator_emission_i / stake_unit
             else:
-                dividend_per_1000_tao = 0.0  # No stake means no dividend per 1000 Tao
+                dividend_per_1000_tao = 0.0
             dividends_per_validator[validator].append(dividend_per_1000_tao)
 
         bonds_per_epoch.append(B_state.clone())
-        server_incentives_per_epoch.append(result['server_incentive'])
+        server_incentives_per_epoch.append(result["server_incentive"])
 
     return dividends_per_validator, bonds_per_epoch, server_incentives_per_epoch
 
-def generate_chart_table(cases, yuma_versions, yuma_hyperparameters, draggable_table=False):
-    """
-    Generates an HTML table with embedded charts for all cases, Yuma versions, and all chart types.
-    Applies alternating background colors for groups of three charts.
-    """
 
-    # Initialize the table structure
-    table_data = {yuma_version: [] for yuma_version, _ in yuma_versions}
+def generate_chart_table(
+    cases: list[BaseCase],
+    yuma_versions: list[tuple[str, YumaParams]],
+    yuma_hyperparameters: SimulationHyperparameters,
+    draggable_table: bool = False,
+) -> HTML:
+    """Generates an HTML table with embedded charts for given cases and Yuma versions."""
+    table_data: dict[str, list[str]] = {
+        yuma_version: [] for yuma_version, _ in yuma_versions
+    }
 
-    def process_chart(table_data, chart_base64_dict):
+    def process_chart(
+        table_data: dict[str, list[str]], chart_base64_dict: dict[str, str]
+    ) -> None:
         for yuma_version, chart_base64 in chart_base64_dict.items():
             content = f"{chart_base64}"
             table_data[yuma_version].append(content)
 
     for idx, case in enumerate(cases):
-        chart_types = ['weights', 'dividends', 'bonds', 'normalized_bonds', 'incentives'] if idx in [9, 10] else ['weights', 'dividends', 'bonds', 'normalized_bonds']
+        if idx in [9, 10]:
+            chart_types = [
+                "weights",
+                "dividends",
+                "bonds",
+                "normalized_bonds",
+                "incentives",
+            ]
+        else:
+            chart_types = ["weights", "dividends", "bonds", "normalized_bonds"]
 
         for chart_type in chart_types:
-            chart_base64_dict = {}
+            chart_base64_dict: dict[str, str] = {}
             for yuma_version, yuma_params in yuma_versions:
                 yuma_config = YumaConfig(
                     simulation=yuma_hyperparameters,
                     yuma_params=yuma_params,
                 )
+                yuma_names = YumaSimulationNames()
                 full_case_name = f"{case.name} - {yuma_version}"
-                if yuma_version in ["Yuma 1 (paper)", "Yuma 1 (paper) - liquid alpha on", "Yuma 2 (Adrian-Fish)"]:
-                    full_case_name = f"{full_case_name} - beta={yuma_config.bond_penalty}"
+                if yuma_version in [
+                    yuma_names.YUMA,
+                    yuma_names.YUMA_LIQUID,
+                    yuma_names.YUMA2,
+                ]:
+                    full_case_name = (
+                        f"{full_case_name} - beta={yuma_config.bond_penalty}"
+                    )
+                elif yuma_version in [
+                    yuma_names.YUMA4_LIQUID
+                ]:
+                    full_case_name = (
+                        f"{full_case_name} [{yuma_config.alpha_low}, {yuma_config.alpha_high}]"
+                    )
 
-                # Run simulation to get dividends and bonds
-                dividends_per_validator, bonds_per_epoch, server_incentives_per_epoch = run_simulation(
+                (
+                    dividends_per_validator,
+                    bonds_per_epoch,
+                    server_incentives_per_epoch,
+                ) = run_simulation(
                     case=case,
                     yuma_version=yuma_version,
                     yuma_config=yuma_config,
                 )
 
-                # Generate the appropriate chart
-                if chart_type == 'weights':
-                    chart_base64 = plot_validator_server_weights(
+                if chart_type == "weights":
+                    chart_base64 = _plot_validator_server_weights(
                         validators=case.validators,
                         weights_epochs=case.weights_epochs,
                         servers=case.servers,
@@ -143,60 +189,62 @@ def generate_chart_table(cases, yuma_versions, yuma_hyperparameters, draggable_t
                         case_name=full_case_name,
                         to_base64=True,
                     )
-                elif chart_type == 'dividends':
-                    chart_base64 = plot_results(
+                elif chart_type == "dividends":
+                    chart_base64 = _plot_dividends(
                         num_epochs=case.num_epochs,
                         validators=case.validators,
                         dividends_per_validator=dividends_per_validator,
                         case=full_case_name,
                         base_validator=case.base_validator,
-                        to_base64=True
+                        to_base64=True,
                     )
-                elif chart_type == 'bonds':
-                    chart_base64 = plot_bonds(
-                        num_epochs=case.num_epochs,
-                        validators=case.validators,
-                        servers=case.servers,
-                        bonds_per_epoch=bonds_per_epoch,
-                        case_name=full_case_name,
-                        to_base64=True
-                    )
-                elif chart_type == 'normalized_bonds':
-                    chart_base64 = plot_bonds(
+                elif chart_type == "bonds":
+                    chart_base64 = _plot_bonds(
                         num_epochs=case.num_epochs,
                         validators=case.validators,
                         servers=case.servers,
                         bonds_per_epoch=bonds_per_epoch,
                         case_name=full_case_name,
                         to_base64=True,
-                        normalize=True
                     )
-                elif chart_type == 'incentives':
-                    chart_base64 = plot_incentives(
+                elif chart_type == "normalized_bonds":
+                    chart_base64 = _plot_bonds(
+                        num_epochs=case.num_epochs,
+                        validators=case.validators,
+                        servers=case.servers,
+                        bonds_per_epoch=bonds_per_epoch,
+                        case_name=full_case_name,
+                        to_base64=True,
+                        normalize=True,
+                    )
+                elif chart_type == "incentives":
+                    chart_base64 = _plot_incentives(
                         servers=case.servers,
                         server_incentives_per_epoch=server_incentives_per_epoch,
                         num_epochs=case.num_epochs,
                         case_name=full_case_name,
-                        to_base64=True
+                        to_base64=True,
                     )
+                else:
+                    raise ValueError("Invalid chart type.")
 
                 chart_base64_dict[yuma_version] = chart_base64
 
-            # Process the chart data for all yuma_versions
             process_chart(table_data, chart_base64_dict)
 
- 
-    # Convert the table to a DataFrame
     summary_table = pd.DataFrame(table_data)
 
     if draggable_table:
-        full_html = generate_draggable_html_table(table_data, summary_table)
+        full_html = _generate_draggable_html_table(table_data, summary_table)
     else:
-        full_html = generate_ipynb_table(table_data, summary_table)
+        full_html = _generate_ipynb_table(table_data, summary_table)
 
     return HTML(full_html)
 
-def generate_draggable_html_table(table_data, summary_table):
+
+def _generate_draggable_html_table(
+    table_data: dict[str, list[str]], summary_table: pd.DataFrame
+) -> str:
     custom_css_js = """
     <style>
         body {
@@ -204,75 +252,55 @@ def generate_draggable_html_table(table_data, summary_table):
             padding: 0;
             overflow: hidden;
         }
+        
         .scrollable-table-container {
+            background-color: #FFFFFF; /* Ensure container is white */
             width: 100%; 
-            height: 100vh; /* Full screen height */
-            overflow: hidden; /* No traditional scrollbars */
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            height: 100vh;
+            overflow: auto;
             border: 1px solid #ccc;
             position: relative; 
-            cursor: grab;
+            user-select: none;
+            scrollbar-width: auto; /* Enable visible scrollbars */
+            -ms-overflow-style: auto;  /* IE 10+ */
         }
-        .scrollable-table-container:active {
-            cursor: grabbing;
+        
+        .scrollable-table-container::-webkit-scrollbar { /* WebKit */
+            width: 10px;
+            height: 10px;
         }
+        
         table {
             border-collapse: collapse;
-            margin: 0 auto;
+            margin: 0;
             width: auto;
         }
+        
         td, th {
             padding: 10px;
             vertical-align: top;
             text-align: center;
         }
+
+        /* Add alternating row colors */
+        tbody tr:nth-child(odd) {
+            background-color: #FFFFFF; /* White for odd rows */
+        }
+        tbody tr:nth-child(even) {
+            background-color: #F8F8F8; /* Light gray for even rows */
+        }
     </style>
-    <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            const container = document.querySelector('.scrollable-table-container');
-            let isDown = false;
-            let startX, startY, scrollLeft, scrollTop;
-
-            container.addEventListener('mousedown', (e) => {
-                isDown = true;
-                startX = e.pageX - container.offsetLeft;
-                startY = e.pageY - container.offsetTop;
-                scrollLeft = container.scrollLeft;
-                scrollTop = container.scrollTop;
-            });
-
-            container.addEventListener('mouseleave', () => {
-                isDown = false;
-            });
-
-            container.addEventListener('mouseup', () => {
-                isDown = false;
-            });
-
-            container.addEventListener('mousemove', (e) => {
-                if (!isDown) return;
-                e.preventDefault();
-                const x = e.pageX - container.offsetLeft;
-                const y = e.pageY - container.offsetTop;
-                const walkX = (x - startX) * 1; 
-                const walkY = (y - startY) * 1; 
-                container.scrollLeft = scrollLeft - walkX;
-                container.scrollTop = scrollTop - walkY;
-            });
-        });
-    </script>
     """
-    
+
     # Generate HTML rows
-    html_rows = []
+    html_rows: list[str] = []
+    # The assumption is that each column in 'table_data' has the same number of rows
     for i in range(len(next(iter(table_data.values())))):  # Number of rows
-        row_html = '<tr>'
+        row_html = "<tr>"
         for yuma_version in summary_table.columns:
             cell_content = summary_table[yuma_version][i]
-            row_html += f'<td>{cell_content}</td>'
-        row_html += '</tr>'
+            row_html += f"<td>{cell_content}</td>"
+        row_html += "</tr>"
         html_rows.append(row_html)
 
     # Combine rows and create the final table
@@ -288,18 +316,22 @@ def generate_draggable_html_table(table_data, summary_table):
         </table>
     </div>
     """
+
     return custom_css_js + html_table
 
-def generate_ipynb_table(table_data, summary_table):
+
+def _generate_ipynb_table(
+    table_data: dict[str, list[str]], summary_table: pd.DataFrame
+) -> str:
     custom_css = """
     <style>
         .scrollable-table-container {
+            background-color: #FFFFFF; /* Ensure container is white */
             width: 100%; 
             overflow-x: auto;
             overflow-y: hidden;
             white-space: nowrap;
-            border: 1px solid #ccc;  
-            background-color: hsl(0, 0%, 98%);
+            border: 1px solid #ccc;
         }
         table {
             border-collapse: collapse;
@@ -311,20 +343,26 @@ def generate_ipynb_table(table_data, summary_table):
             vertical-align: top;
             text-align: center;
         }
+        /* Add alternating row colors */
+        tbody tr:nth-child(odd) {
+            background-color: #FFFFFF; /* White for odd rows */
+        }
+        tbody tr:nth-child(even) {
+            background-color: #F8F8F8; /* Light gray for even rows */
+        }
     </style>
     """
 
-    # Generate HTML rows
-    html_rows = []
-    for i in range(len(next(iter(table_data.values())))):  # Number of rows
-        row_html = '<tr>'
+    html_rows: list[str] = []
+    num_rows = len(next(iter(table_data.values())))
+    for i in range(num_rows):
+        row_html = "<tr>"
         for yuma_version in summary_table.columns:
             cell_content = summary_table[yuma_version][i]
-            row_html += f'<td>{cell_content}</td>'
-        row_html += '</tr>'
+            row_html += f"<td>{cell_content}</td>"
+        row_html += "</tr>"
         html_rows.append(row_html)
 
-    # Combine rows and create the final table
     html_table = f"""
     <div class="scrollable-table-container">
         <table>
@@ -339,378 +377,62 @@ def generate_ipynb_table(table_data, summary_table):
     """
     return custom_css + html_table
 
-def plot_results(
-    num_epochs: int,
-    validators: list[str],
-    dividends_per_validator: Dict[str, List[float]],
-    case: str,
-    base_validator: str,
-    to_base64: bool = False
-):
-
-    plt.close('all')
-    _, ax_main = plt.subplots(figsize=(14, 6))
-
-    num_epochs_calculated = None
-    x = None
-
-    validator_styles = get_validator_styles(validators)
-
-    total_dividends, percentage_diff_vs_base = calculate_total_dividends(
-        validators,
-        dividends_per_validator,
-        base_validator,
-        num_epochs
-    )
-
-    for idx, (validator, dividends) in enumerate(dividends_per_validator.items()):
-        if isinstance(dividends, torch.Tensor):
-            dividends = dividends.detach().cpu().numpy()
-        elif isinstance(dividends, list):
-            dividends = np.array([float(d) for d in dividends])
-        else:
-            dividends = np.array(dividends, dtype=float)
-
-        if num_epochs_calculated is None:
-            num_epochs_calculated = len(dividends)
-            x = np.array(range(num_epochs_calculated))
-
-        delta = 0.05  # Adjust this value as needed
-        x_shifted = x + idx * delta
-
-        linestyle, marker, markersize, markeredgewidth = validator_styles[validator]
-
-        total_dividend = total_dividends[validator]
-
-        percentage_diff = percentage_diff_vs_base[validator]
-
-        if percentage_diff > 0:
-            percentage_str = f"(+{percentage_diff:.1f}%)"
-        elif percentage_diff < 0:
-            percentage_str = f"({percentage_diff:.1f}%)"
-        else:
-            percentage_str = "(Base)"
-
-        label = f"{validator}: Total = {total_dividend:.6f} {percentage_str}"
-
-        ax_main.plot(
-            x_shifted,
-            dividends,
-            marker=marker,
-            markeredgewidth=markeredgewidth,
-            markersize=markersize,
-            label=label,
-            alpha=0.7,
-            linestyle=linestyle
-        )
-
-    set_default_xticks(ax_main, num_epochs_calculated)
-
-    ax_main.set_xlabel('Time (Epochs)')
-    ax_main.set_ylim(bottom=0)
-    ax_main.set_ylabel('Dividend per 1,000 Tao per Epoch')
-    ax_main.set_title(f'{case}')
-    ax_main.grid(True)
-    ax_main.legend()
-
-    # Glitch fix for Case 4
-    if case.startswith("Case 4"):
-        ax_main.set_ylim(0, 0.042)  # Set specific height for Case 4
-
-    plt.subplots_adjust(hspace=0.3)
-
-    if to_base64:
-        return plot_to_base64()
-    plt.show()
-
-def plot_bonds(
-    num_epochs: int,
-    validators: List[str],
-    servers: List[str],
-    bonds_per_epoch: List[torch.Tensor],
-    case_name: str,
-    to_base64: bool = False,
-    normalize: bool = False
-):
-    x = list(range(num_epochs))
-
-    fig, axes = plt.subplots(1, len(servers), figsize=(14, 5), sharex=True, sharey=True)
-    if len(servers) == 1:
-        axes = [axes]
-
-    bonds_data = prepare_bond_data(bonds_per_epoch, validators, servers, normalize=normalize)
-    validator_styles = get_validator_styles(validators)
-
-    handles, labels = [], []
-    for idx_s, server in enumerate(servers):
-        ax = axes[idx_s]
-        for idx_v, validator in enumerate(validators):
-            bonds = bonds_data[idx_s][idx_v]
-            linestyle, marker, markersize, markeredgewidth = validator_styles[validator]
-
-            line, = ax.plot(
-                x, bonds,
-                alpha=0.7,
-                marker=marker,
-                markersize=markersize,
-                markeredgewidth=markeredgewidth,
-                linestyle=linestyle,
-                linewidth=2
-            )
-            if idx_s == 0:
-                handles.append(line)
-                labels.append(validator)
-
-        set_default_xticks(ax, num_epochs)
-
-        ylabel = 'Bond Ratio' if normalize else 'Bond Value'
-        ax.set_xlabel('Epoch')
-        if idx_s == 0:
-            ax.set_ylabel(ylabel)
-        ax.set_title(server)
-        ax.grid(True)
-
-        if normalize:
-            ax.set_ylim(0, 1.05)
-
-    fig.suptitle(
-        f"Validators bonds per Server{' normalized' if normalize else ''}\n{case_name}", 
-        fontsize=14
-    )
-    fig.legend(handles, labels, loc='lower center', ncol=len(validators), bbox_to_anchor=(0.5, 0.02))
-    plt.tight_layout(rect=[0, 0.05, 0.98, 0.95])
-
-    if to_base64:
-        return plot_to_base64()
-
-    plt.show()
-
-def plot_validator_server_weights(
-    validators: List[str],
-    weights_epochs: List[torch.Tensor],
-    servers: List[str],
-    num_epochs: int,
-    case_name: str,
-    to_base64: bool = False,
-):
-    validator_styles = get_validator_styles(validators)
-
-    y_values_all = [
-        weights_epochs[epoch][idx_v][1].item()
-        for idx_v in range(len(validators))
-        for epoch in range(num_epochs)
-    ]
-    unique_y_values = sorted(set(y_values_all))
-    min_label_distance = 0.05
-    close_to_server_threshold = 0.02
-
-    def is_round_number(y):
-        return abs((y * 20) - round(y * 20)) < 1e-6  # Check if value is a multiple of 0.05
-
-    y_tick_positions = [0.0, 1.0]
-    y_tick_labels = [servers[0], servers[1]]
-
-    for y in unique_y_values:
-        if y in [0.0, 1.0]:
-            continue
-        if abs(y - 0.0) < close_to_server_threshold or abs(y - 1.0) < close_to_server_threshold:
-            continue
-        if is_round_number(y):
-            if all(abs(y - existing_y) >= min_label_distance for existing_y in y_tick_positions):
-                y_tick_positions.append(y)
-                y_percentage = y * 100
-                label = f'{y_percentage:.0f}%' if y_percentage.is_integer() else f'{y_percentage:.1f}%'
-                y_tick_labels.append(label)
-        else:
-            if all(abs(y - existing_y) >= min_label_distance for existing_y in y_tick_positions):
-                y_tick_positions.append(y)
-                y_percentage = y * 100
-                label = f'{y_percentage:.0f}%' if y_percentage.is_integer() else f'{y_percentage:.1f}%'
-                y_tick_labels.append(label)
-
-    ticks = sorted(zip(y_tick_positions, y_tick_labels))
-    y_tick_positions, y_tick_labels = zip(*ticks)
-
-    fig_height = 1 if len(y_tick_positions) <= 2 else 3
-    fig, ax = plt.subplots(figsize=(14, fig_height))
-    ax.set_ylim(-0.05, 1.05)
-
-    for idx_v, validator in enumerate(validators):
-        y_values = [weights_epochs[epoch][idx_v][1].item() for epoch in range(num_epochs)]
-        linestyle, marker, markersize, markeredgewidth = validator_styles[validator]
-
-        ax.plot(
-            range(num_epochs),
-            y_values,
-            label=validator,
-            marker=marker,
-            linestyle=linestyle,
-            markersize=markersize,
-            markeredgewidth=markeredgewidth,
-            linewidth=2
-        )
-
-    ax.set_yticks(y_tick_positions)
-    ax.set_yticklabels(y_tick_labels)
-
-    set_default_xticks(ax, num_epochs)
-
-    ax.set_xlabel('Epoch')
-    ax.set_title(f'Validators Weights to Servers \n{case_name}')
-    ax.legend()
-    ax.grid(True)
-
-    if to_base64:
-        return plot_to_base64()
-    plt.show()
-
-def plot_incentives(
-    servers: List[str],
-    server_incentives_per_epoch: List[torch.Tensor],
-    num_epochs: int,
-    case_name: str,
-    to_base64: bool = False
-):
-    x = np.arange(num_epochs)
-    _, ax = plt.subplots(figsize=(14, 3))
-
-    for idx_s, server in enumerate(servers):
-        incentives = [server_incentives[idx_s].item() for server_incentives in server_incentives_per_epoch]
-        ax.plot(x, incentives, label=server)
-
-    set_default_xticks(ax, num_epochs)
-
-    ax.set_xlabel('Epoch')
-    ax.set_ylabel('Server Incentive')
-    ax.set_title(f'Server Incentives\n{case_name}')
-    ax.set_ylim(-0.05, 1.05)
-    ax.legend()
-    ax.grid(True)
-
-    if to_base64:
-        return plot_to_base64()
-    plt.show()
-
-def plot_to_base64():
-    """
-    Captures the current Matplotlib figure and encodes it as a Base64 string.
-    """
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', transparent=True, bbox_inches='tight', dpi=80)
-    buf.seek(0)
-    encoded_image = base64.b64encode(buf.read()).decode('ascii')
-    buf.close()
-    plt.close()
-    # Use max-width instead of fixed width for responsiveness
-    return f'<img src="data:image/png;base64,{encoded_image}" style="max-width:1200px; height:auto;">'
-
-def calculate_total_dividends(
-    validators: List[str],
-    dividends_per_validator: Dict[str, List[float]],
-    base_validator: str,
-    num_epochs: int,
-) -> Tuple[Dict[str, float], Dict[str, float]]:
-    """
-    Calculates the total dividends per validator and computes the percentage difference
-    relative to the provided base validator.
-
-    Returns:
-        total_dividends: Dict mapping validator names to their total dividends.
-        percentage_diff_vs_base: Dict mapping validator names to their percentage difference vs. base.
-    """
-    total_dividends = {}
-    for validator in validators:
-        dividends = dividends_per_validator.get(validator, [])
-        dividends = dividends[:num_epochs]
-        total_dividend = sum(dividends)
-        total_dividends[validator] = total_dividend
-
-    # Get base dividend
-    base_dividend = total_dividends.get(base_validator, None)
-    if base_dividend is None or base_dividend == 0.0:
-        print(f"Warning: Base validator '{base_validator}' has zero or missing total dividends.")
-        base_dividend = 1e-6  # Assign a small epsilon value to avoid division by zero
-
-    # Compute percentage difference vs base for each validator
-    percentage_diff_vs_base = {}
-    for validator, total_dividend in total_dividends.items():
-        if validator == base_validator:
-            percentage_diff_vs_base[validator] = 0.0  # Base validator has 0% difference vs itself
-        else:
-            percentage_diff = ((total_dividend - base_dividend) / base_dividend) * 100.0
-            percentage_diff_vs_base[validator] = percentage_diff
-
-    return total_dividends, percentage_diff_vs_base
 
 def generate_total_dividends_table(
-    cases: List[BaseCase],
-    yuma_versions: List[Tuple[str, YumaParams]],
+    cases: list[BaseCase],
+    yuma_versions: list[tuple[str, YumaParams]],
     simulation_hyperparameters: SimulationHyperparameters,
 ) -> pd.DataFrame:
-    """
-    Generates a DataFrame with total dividends per standardized validator (A, B, C)
-    for each Yuma version and case.
-    """
-    standardized_validators = ['Validator A', 'Validator B', 'Validator C']
-    rows = []
+    """Generates a DataFrame of total dividends for standardized validator names across Yuma versions."""
+
+    standardized_validators = ["Validator A", "Validator B", "Validator C"]
+    rows: list[dict[str, object]] = []
 
     for case in cases:
-        # Ensure exactly three validators
         if len(case.validators) != 3:
             raise ValueError(f"Case '{case.name}' does not have exactly 3 validators.")
 
-        # Map original validators to standardized names
         validator_mapping = {
-            case.validators[0]: 'Validator A',
-            case.validators[1]: 'Validator B',
-            case.validators[2]: 'Validator C',
+            case.validators[0]: "Validator A",
+            case.validators[1]: "Validator B",
+            case.validators[2]: "Validator C",
         }
 
-        # Initialize a row with 'Case'
-        row = {'Case': case.name}
+        row: dict[str, object] = {"Case": case.name}
 
         for yuma_version, yuma_params in yuma_versions:
-            # Create the Yuma configuration for the current version
             yuma_config = YumaConfig(
                 simulation=simulation_hyperparameters,
                 yuma_params=yuma_params,
             )
 
-            # Run simulation
             dividends_per_validator, _, _ = run_simulation(
                 case=case,
                 yuma_version=yuma_version,
                 yuma_config=yuma_config,
             )
 
-            # Calculate total dividends
-            total_dividends, _ = calculate_total_dividends(
+            total_dividends, _ = _calculate_total_dividends(
                 validators=case.validators,
                 dividends_per_validator=dividends_per_validator,
                 base_validator=case.base_validator,
-                num_epochs=case.num_epochs
+                num_epochs=case.num_epochs,
             )
 
-            # Map dividends to standardized validator names
             standardized_dividends = {
                 validator_mapping[orig_val]: total_dividends.get(orig_val, 0.0)
                 for orig_val in case.validators
             }
 
-            # Populate row with dividends for each Yuma version and validator
             for std_validator in standardized_validators:
                 dividend = standardized_dividends.get(std_validator, 0.0)
                 column_name = f"{std_validator} - {yuma_version}"
                 row[column_name] = dividend
 
-        # Append the populated row for the current case
         rows.append(row)
 
-    # Create DataFrame from all rows
     df = pd.DataFrame(rows)
-
-    # Optional: Reorder columns to have 'Case' first and then Yuma versions in the provided order
-    columns = ['Case']
+    columns = ["Case"]
     for yuma_version, _ in yuma_versions:
         for std_validator in standardized_validators:
             col_name = f"{std_validator} - {yuma_version}"
@@ -719,104 +441,3 @@ def generate_total_dividends_table(
     df = df[columns]
 
     return df
-
-def generate_ipynb_table(table_data, summary_table):
-    custom_css = """
-    <style>
-        .scrollable-table-container {
-            width: 100%; 
-            overflow-x: auto;
-            overflow-y: hidden;
-            white-space: nowrap;
-            border: 1px solid #ccc;  
-            background-color: hsl(0, 0%, 98%);
-        }
-        table {
-            border-collapse: collapse;
-            table-layout: auto;
-            width: auto;
-        }
-        td, th {
-            padding: 10px;
-            vertical-align: top;
-            text-align: center;
-        }
-    </style>
-    """
-
-    # Generate HTML rows
-    html_rows = []
-    for i in range(len(next(iter(table_data.values())))):  # Number of rows
-        row_html = '<tr>'
-        for yuma_version in summary_table.columns:
-            cell_content = summary_table[yuma_version][i]
-            row_html += f'<td>{cell_content}</td>'
-        row_html += '</tr>'
-        html_rows.append(row_html)
-
-    # Combine rows and create the final table
-    html_table = f"""
-    <div class="scrollable-table-container">
-        <table>
-            <thead>
-                <tr>{''.join(f'<th>{col}</th>' for col in summary_table.columns)}</tr>
-            </thead>
-            <tbody>
-                {''.join(html_rows)}
-            </tbody>
-        </table>
-    </div>
-    """
-    return custom_css + html_table
-
-def prepare_bond_data(bonds_per_epoch, validators, servers, normalize: bool):
-    num_epochs = len(bonds_per_epoch)
-    bonds_data = []
-    for idx_s, _ in enumerate(servers):
-        server_bonds = []
-        for idx_v, _ in enumerate(validators):
-            validator_bonds = [bonds_per_epoch[epoch][idx_v, idx_s].item() for epoch in range(num_epochs)]
-            server_bonds.append(validator_bonds)
-        bonds_data.append(server_bonds)
-
-    if normalize:
-        for idx_s in range(len(servers)):
-            for epoch in range(num_epochs):
-                epoch_bonds = [bonds_data[idx_s][idx_v][epoch] for idx_v in range(len(validators))]
-                total = sum(epoch_bonds)
-                if total > 1e-12:
-                    for idx_v in range(len(validators)):
-                        bonds_data[idx_s][idx_v][epoch] /= total
-
-    return bonds_data
-
-def plot_to_base64():
-    """
-    Captures the current Matplotlib figure and encodes it as a Base64 string.
-    """
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', transparent=True, bbox_inches='tight', dpi=100)  # Use a higher DPI for sharper images
-    buf.seek(0)
-    encoded_image = base64.b64encode(buf.read()).decode('ascii')
-    buf.close()
-    plt.close()
-    # Use max-width instead of fixed width for responsiveness
-    return f'<img src="data:image/png;base64,{encoded_image}" style="max-width:1200px; height:auto;">'
-
-def get_validator_styles(validators):
-    combined_styles = [
-        ('-', '+', 12, 2),
-        ('--', 'x', 12, 1),
-        (':', 'o', 4, 1)
-    ]
-    return {
-        validator: combined_styles[idx % len(combined_styles)]
-        for idx, validator in enumerate(validators)
-    }
-
-def set_default_xticks(ax, num_epochs: int):
-    tick_locs = [0, 1, 2] + list(range(5, num_epochs, 5))
-    tick_labels = [str(i) for i in tick_locs]
-    ax.set_xticks(tick_locs)
-    ax.set_xticklabels(tick_labels, fontsize=8)
-
