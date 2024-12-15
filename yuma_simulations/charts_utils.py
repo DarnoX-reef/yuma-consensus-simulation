@@ -345,7 +345,8 @@ def _plot_to_base64() -> str:
     encoded_image = base64.b64encode(buf.read()).decode("ascii")
     buf.close()
     plt.close()
-    return f'<img src="data:image/png;base64,{encoded_image}" style="max-width:1200px; height:auto;">'
+    return f'<img src="data:image/png;base64,{encoded_image}" style="max-width:1200px; height:auto;" draggable="false">'
+
 
 
 def _set_default_xticks(ax: Axes, num_epochs: int) -> None:

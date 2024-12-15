@@ -254,18 +254,30 @@ def _generate_draggable_html_table(
         }
         
         .scrollable-table-container {
-            background-color: #FFFFFF; /* Ensure container is white */
+            background-color: #FFFFFF; 
             width: 100%; 
             height: 100vh;
             overflow: auto;
             border: 1px solid #ccc;
             position: relative; 
             user-select: none;
-            scrollbar-width: auto; /* Enable visible scrollbars */
-            -ms-overflow-style: auto;  /* IE 10+ */
+            scrollbar-width: auto;
+            -ms-overflow-style: auto;
+            cursor: grab;
+        }
+
+        .scrollable-table-container:active {
+            cursor: grabbing;
+        }
+
+        /* Ensure images don't intercept pointer events */
+        .scrollable-table-container img {
+            user-select: none;
+            -webkit-user-drag: none;
+            pointer-events: none; /* This ensures the container gets the events */
         }
         
-        .scrollable-table-container::-webkit-scrollbar { /* WebKit */
+        .scrollable-table-container::-webkit-scrollbar {
             width: 10px;
             height: 10px;
         }
@@ -282,20 +294,54 @@ def _generate_draggable_html_table(
             text-align: center;
         }
 
-        /* Add alternating row colors */
         tbody tr:nth-child(odd) {
-            background-color: #FFFFFF; /* White for odd rows */
+            background-color: #FFFFFF;
         }
         tbody tr:nth-child(even) {
-            background-color: #F8F8F8; /* Light gray for even rows */
+            background-color: #F8F8F8;
         }
     </style>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const container = document.querySelector('.scrollable-table-container');
+            let isDown = false;
+            let startX, startY, scrollLeft, scrollTop;
+            
+            container.addEventListener('dragstart', function(e) {
+                e.preventDefault();
+            });
+
+            container.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                isDown = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                scrollLeft = container.scrollLeft;
+                scrollTop = container.scrollTop;
+            });
+
+            document.addEventListener('mouseup', () => {
+                isDown = false;
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if(!isDown) return;
+                e.preventDefault();
+                const x = e.clientX;
+                const y = e.clientY;
+                const walkX = x - startX;
+                const walkY = y - startY;
+                container.scrollLeft = scrollLeft - walkX;
+                container.scrollTop = scrollTop - walkY;
+            });
+        });
+    </script>
     """
 
     # Generate HTML rows
     html_rows: list[str] = []
-    # The assumption is that each column in 'table_data' has the same number of rows
-    for i in range(len(next(iter(table_data.values())))):  # Number of rows
+    for i in range(len(next(iter(table_data.values())))):
         row_html = "<tr>"
         for yuma_version in summary_table.columns:
             cell_content = summary_table[yuma_version][i]
@@ -303,7 +349,6 @@ def _generate_draggable_html_table(
         row_html += "</tr>"
         html_rows.append(row_html)
 
-    # Combine rows and create the final table
     html_table = f"""
     <div class="scrollable-table-container">
         <table>
